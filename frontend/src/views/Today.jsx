@@ -188,6 +188,8 @@ export default function Today() {
 
   const t = summary?.targets;
   const margin = t ? t.targetCalories - summary.net : null;
+  // déficit real de hoy contra el gasto total: negativo = quemando grasa
+  const todayDeficit = t ? t.tdee + summary.burned - summary.consumed : null;
 
   return (
     <>
@@ -206,6 +208,14 @@ export default function Today() {
           hint={margin != null ? `margen: ${margin} kcal` : 'consumidas − quemadas'}
         />
       </div>
+
+      {todayDeficit != null && summary.consumed > 0 ? (
+        <p className="note">
+          {todayDeficit > 0
+            ? `Hoy vas ${todayDeficit} kcal por debajo de tu gasto total ≈ ${Math.round(todayDeficit / 7.7)} g de grasa quemada.`
+            : `Hoy vas ${-todayDeficit} kcal por encima de tu gasto total.`}
+        </p>
+      ) : null}
 
       <QuickFood onSaved={refresh} />
       <QuickExercise exercises={exercises} onSaved={refresh} />

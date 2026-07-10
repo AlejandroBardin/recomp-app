@@ -20,6 +20,7 @@ export default function Progress() {
   const [profile, setProfile] = useState(null);
   const [summary, setSummary] = useState(null);
   const [weights, setWeights] = useState([]);
+  const [energy, setEnergy] = useState(null);
   const [form, setForm] = useState(null);
   const [newWeight, setNewWeight] = useState('');
   const [weightDate, setWeightDate] = useState(todayStr());
@@ -39,6 +40,7 @@ export default function Progress() {
     });
     api.get('/api/summary').then(setSummary).catch(() => {});
     api.get('/api/weights').then(setWeights).catch(() => {});
+    api.get('/api/energy?days=30').then(setEnergy).catch(() => {});
   }, []);
 
   useEffect(refresh, [refresh]);
@@ -152,6 +154,69 @@ export default function Progress() {
       ) : (
         <p className="note">Completá tu perfil y cargá al menos un peso para ver tus cálculos.</p>
       )}
+
+      {energy?.available && energy.daysCounted > 0 ? (
+        <div className="card">
+          <h2>Quema de grasa (últimos 30 días)</h2>
+          <div className="tile-grid">
+            <div className="tile">
+              <span className="tile-label">Balance acumulado</span>
+              <span className="tile-value">{energy.totalBalance > 0 ? '+' : ''}{energy.totalBalance}</span>
+              <span className="tile-hint">kcal en {energy.daysCounted} días registrados</span>
+            </div>
+            <div className="tile">
+              <span className="tile-label">Grasa estimada</span>
+              <span className="tile-value">
+                {energy.fatKg >= 0 ? '−' : '+'}{Math.abs(energy.fatKg).toFixed(2)}
+              </span>
+              <span className="tile-hint">kg (1 kg ≈ {energy.kcalPerKg} kcal)</span>
+            </div>
+            <div className="tile">
+              <span className="tile-label">Promedio diario</span>
+              <span className="tile-value">{energy.avgBalance > 0 ? '+' : ''}{energy.avgBalance}</span>
+              <span className="tile-hint">
+                {energy.avgBalance < 0
+                  ? `≈ ${Math.round(-energy.avgBalance / (energy.kcalPerKg / 1000))} g de grasa/día`
+                  : 'kcal por día'}
+              </span>
+            </div>
+            <div className="tile">
+              <span className="tile-label">Báscula</span>
+              <span className="tile-value">
+                {energy.scaleChangeKg != null
+                  ? `${energy.scaleChangeKg > 0 ? '+' : ''}${energy.scaleChangeKg}`
+                  : '—'}
+              </span>
+              <span className="tile-hint">kg reales en el período</span>
+            </div>
+          </div>
+          <details>
+            <summary className="muted" style={{ cursor: 'pointer' }}>
+              Ver balance día por día
+            </summary>
+            <div className="entry-list">
+              {[...energy.days].reverse().map((d) => (
+                <div className="entry" key={d.date}>
+                  <div className="entry-main">
+                    <div className="entry-name">{fmtDate(d.date)}</div>
+                    <div className="entry-sub">
+                      comió {d.consumed} · gasto {d.tdee}{d.burned ? ` + ${d.burned} ejercicio` : ''}
+                    </div>
+                  </div>
+                  <span className="entry-kcal" style={d.balance < 0 ? { color: 'var(--accent)' } : {}}>
+                    {d.balance > 0 ? '+' : ''}{d.balance} kcal
+                  </span>
+                </div>
+              ))}
+            </div>
+          </details>
+          <p className="note">
+            La estimación usa 7700 kcal por kg de tejido adiposo (la grasa pura ronda las 9000
+            kcal/kg, pero el tejido que ves en la báscula es ~87% grasa). Solo cuentan los días
+            con comida registrada, y la báscula puede diferir por agua y glucógeno.
+          </p>
+        </div>
+      ) : null}
 
       <form className="card" onSubmit={saveProfile}>
         <h2>Perfil</h2>

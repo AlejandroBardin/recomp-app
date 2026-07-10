@@ -3,8 +3,15 @@ import Today from './views/Today.jsx';
 import Exercises from './views/Exercises.jsx';
 import Foods from './views/Foods.jsx';
 import Progress from './views/Progress.jsx';
+import Hero from './views/Hero.jsx';
 
 const ICONS = {
+  heroe: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z" />
+      <path d="M12 8v5M9.5 10.5h5" />
+    </svg>
+  ),
   hoy: (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 11.5 12 4l9 7.5" /><path d="M5.5 10v9h13v-9" />
@@ -28,6 +35,7 @@ const ICONS = {
 };
 
 const TABS = [
+  { id: 'heroe', label: 'Héroe', View: Hero },
   { id: 'hoy', label: 'Hoy', View: Today },
   { id: 'ejercicio', label: 'Ejercicio', View: Exercises },
   { id: 'comida', label: 'Comida', View: Foods },

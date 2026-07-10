@@ -64,8 +64,40 @@ CREATE TABLE IF NOT EXISTS profile (
   rate_pct REAL
 );
 
+CREATE TABLE IF NOT EXISTS habits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  key TEXT NOT NULL UNIQUE,
+  pillar TEXT NOT NULL,
+  name TEXT NOT NULL,
+  xp INTEGER NOT NULL DEFAULT 10,
+  sort INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS habit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT NOT NULL,
+  habit_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+  UNIQUE(date, habit_id)
+);
+
+CREATE TABLE IF NOT EXISTS xp_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT NOT NULL,
+  pillar TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  source TEXT NOT NULL,
+  ref_id INTEGER,
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_exercise_logs_date ON exercise_logs(date);
 CREATE INDEX IF NOT EXISTS idx_food_entries_date ON food_entries(date);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON habit_logs(date);
+CREATE INDEX IF NOT EXISTS idx_xp_events_date ON xp_events(date);
+CREATE INDEX IF NOT EXISTS idx_xp_events_pillar ON xp_events(pillar);
 `);
 
 const BASE_EXERCISES = [
@@ -84,6 +116,50 @@ const count = db.prepare('SELECT COUNT(*) AS n FROM exercises').get().n;
 if (count === 0) {
   const insert = db.prepare('INSERT INTO exercises (name, type, met, unit) VALUES (?, ?, ?, ?)');
   for (const e of BASE_EXERCISES) insert.run(e.name, e.type, e.met, e.unit);
+}
+
+// Misiones diarias por pilar. El pilar "fisico" suma XP automáticamente
+// desde los registros de ejercicio y las bajadas de peso.
+const BASE_HABITS = [
+  { key: 'agua', pillar: 'alimentacion', name: 'Beber 2 L de agua', xp: 15 },
+  { key: 'verduras', pillar: 'alimentacion', name: 'Comer 2+ porciones de verdura', xp: 15 },
+  { key: 'cocina', pillar: 'alimentacion', name: 'Cocinar saludable en casa', xp: 20 },
+  { key: 'dia-limpio', pillar: 'alimentacion', name: 'Día limpio (nada fuera de hambre real)', xp: 25 },
+  { key: 'cama', pillar: 'habitos', name: 'Tender la cama', xp: 10 },
+  { key: 'sueno', pillar: 'habitos', name: 'Dormir 7–8 h en horario consistente', xp: 20 },
+  { key: 'orden', pillar: 'habitos', name: 'Espacio de trabajo ordenado', xp: 10 },
+  { key: 'higiene', pillar: 'habitos', name: 'Autocuidado (ducha, afeitado)', xp: 10 },
+  { key: 'oracion', pillar: 'oracion', name: '15 min de oración / meditación', xp: 20 },
+  { key: 'lectura', pillar: 'oracion', name: 'Leer un pasaje inspirador', xp: 15 },
+  { key: 'servicio', pillar: 'oracion', name: 'Asistir a un servicio', xp: 30 },
+  { key: 'tareas', pillar: 'trabajo', name: 'Completar la lista de tareas', xp: 20 },
+  { key: 'profundo', pillar: 'trabajo', name: '4 h de trabajo profundo', xp: 30 },
+  { key: 'meta', pillar: 'trabajo', name: 'Alcanzar una meta profesional', xp: 50 }
+];
+
+const habitCount = db.prepare('SELECT COUNT(*) AS n FROM habits').get().n;
+if (habitCount === 0) {
+  const insert = db.prepare('INSERT INTO habits (key, pillar, name, xp, sort) VALUES (?, ?, ?, ?, ?)');
+  BASE_HABITS.forEach((h, i) => insert.run(h.key, h.pillar, h.name, h.xp, i));
+}
+
+// Backfill: el esfuerzo previo a la gamificación también cuenta.
+const { exerciseXp, weightXp } = require('./gamify');
+const xpCount = db.prepare('SELECT COUNT(*) AS n FROM xp_events').get().n;
+if (xpCount === 0) {
+  const insertXp = db.prepare(
+    'INSERT INTO xp_events (date, pillar, amount, source, ref_id, note) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+  for (const l of db.prepare('SELECT * FROM exercise_logs').all()) {
+    insertXp.run(l.date, 'fisico', exerciseXp(l.calories), 'exercise', l.id, l.exercise_name);
+  }
+  let best = null;
+  for (const w of db.prepare('SELECT * FROM weight_entries ORDER BY date ASC').all()) {
+    if (best != null && w.weight < best) {
+      insertXp.run(w.date, 'fisico', weightXp(best, w.weight), 'weight', w.id, `-${(best - w.weight).toFixed(1)} kg`);
+    }
+    if (best == null || w.weight < best) best = w.weight;
+  }
 }
 
 module.exports = db;

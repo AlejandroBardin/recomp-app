@@ -280,3 +280,253 @@ button.ghost.active { border-color: var(--accent); color: var(--accent); }
 }
 
 datalist { display: none; }
+
+/* ---------- Héroe ---------- */
+.hero-head { display: flex; align-items: center; justify-content: space-between; }
+.streak {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
+.hero-card { align-items: center; position: relative; overflow: hidden; }
+
+/* stepper de desarrollo: simular niveles para previsualizar la progresión */
+.dev-stepper {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 2;
+}
+.dev-stepper .ghost {
+  width: 38px;
+  min-height: 34px;
+  padding: 4px;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.dev-stepper .reset { color: var(--accent); border-color: var(--accent); }
+
+.avatar-box {
+  position: relative;
+  width: min(240px, 70vw);
+  aspect-ratio: 220 / 290;
+}
+.avatar-box.glowing { filter: drop-shadow(0 0 18px rgba(255, 215, 94, 0.35)); }
+.avatar-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.hero-identity { display: flex; align-items: baseline; gap: 10px; }
+.hero-level { font-size: 1.5rem; font-weight: 800; }
+.hero-rank {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.xp-bar-track {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.xp-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), #7db4ef);
+  transition: width 0.6s ease;
+}
+.xp-bar-caption { font-size: 0.78rem; color: var(--ink-2); }
+.tier-chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.center { text-align: center; }
+
+.gain-float {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  font-weight: 800;
+  color: var(--accent);
+  animation: gain-up 1.4s ease-out forwards;
+  pointer-events: none;
+  z-index: 2;
+}
+@keyframes gain-up {
+  0% { opacity: 0; transform: translateY(8px) scale(0.9); }
+  20% { opacity: 1; transform: translateY(0) scale(1.1); }
+  100% { opacity: 0; transform: translateY(-26px) scale(1); }
+}
+
+/* ---------- Level up estilo MU: columna de luz dorada ---------- */
+.lvlfx {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  overflow: hidden;
+}
+.lvlfx-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 60%, rgba(255, 218, 110, 0.5), transparent 62%);
+  animation: lvl-flash 2.6s ease-out forwards;
+}
+.lvlfx-pillar {
+  position: absolute;
+  left: 50%;
+  bottom: -6%;
+  width: 130px;
+  height: 108%;
+  transform: translateX(-50%) scaleY(0);
+  transform-origin: bottom;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(255, 198, 78, 0.25) 25%,
+    rgba(255, 218, 110, 0.5) 60%,
+    rgba(255, 240, 180, 0.68)
+  );
+  filter: blur(7px);
+  border-radius: 50% 50% 0 0 / 14% 14% 0 0;
+  animation: lvl-pillar 2.6s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+.lvlfx-pillar.core {
+  width: 48px;
+  filter: blur(2px);
+  background: linear-gradient(180deg, transparent 8%, rgba(255, 246, 205, 0.9));
+  animation-delay: 0.08s;
+}
+.lvlfx-spark {
+  position: absolute;
+  bottom: 6%;
+  border-radius: 50%;
+  background: #ffe9a8;
+  box-shadow: 0 0 8px 2px rgba(255, 213, 96, 0.9);
+  opacity: 0;
+  animation: lvl-spark 1.8s ease-out forwards;
+}
+.lvlfx-text {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 18%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  animation: lvl-text 2.6s ease-out forwards;
+}
+.lvlfx-title {
+  font-size: 2.1rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #ffd75e;
+  text-shadow: 0 0 18px rgba(255, 189, 56, 0.9), 0 2px 0 rgba(122, 72, 0, 0.55);
+}
+.lvlfx-level {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 215, 94, 0.85);
+}
+@keyframes lvl-pillar {
+  0% { transform: translateX(-50%) scaleY(0); opacity: 0; }
+  15% { opacity: 1; transform: translateX(-50%) scaleY(1); }
+  70% { opacity: 0.9; }
+  100% { opacity: 0; transform: translateX(-50%) scaleY(1.04); }
+}
+@keyframes lvl-flash {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  60% { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+@keyframes lvl-spark {
+  0% { opacity: 0; transform: translateY(0) scale(0.6); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-72vh) scale(1.15); }
+}
+@keyframes lvl-text {
+  0% { opacity: 0; transform: scale(0.6); }
+  12% { opacity: 1; transform: scale(1.08); }
+  20% { transform: scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.02) translateY(-10px); }
+}
+
+/* ---------- Misiones ---------- */
+.mission-group { display: flex; flex-direction: column; gap: 6px; }
+.mission-pillar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  margin-top: 6px;
+}
+.mission-today { font-size: 0.72rem; font-weight: 600; color: var(--accent); }
+.mission {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.92rem;
+  text-align: left;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-height: 46px;
+  cursor: pointer;
+}
+.mission-check {
+  flex: 0 0 24px;
+  height: 24px;
+  border: 2px solid var(--axis);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #fff;
+}
+.mission-name { flex: 1; }
+.mission-xp { font-size: 0.8rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mission.done { border-color: var(--accent); }
+.mission.done .mission-check { background: var(--accent); border-color: var(--accent); }
+.mission.done .mission-name { color: var(--ink-2); text-decoration: line-through; }
+.mission.done .mission-xp { color: var(--accent); }
+
+/* ---------- Pilares ---------- */
+.pillar-row { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; }
+.pillar-name { flex: 0 0 132px; }
+.pillar-track {
+  flex: 1;
+  height: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.pillar-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.5s ease; }
+.pillar-xp { flex: 0 0 52px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
