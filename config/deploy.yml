@@ -1,0 +1,33 @@
+service: recomp
+image: alebardin/app-recomp
+
+servers:
+  web:
+    - 140.238.178.169
+
+proxy:
+  ssl: true
+  host: recomp.codemate.com.ar
+  app_port: 3001
+
+registry:
+  username: alebardin
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+builder:
+  arch: aarch64
+  remote: ssh://ubuntu@140.238.178.169
+
+# Volumen persistente en el servidor (la DB SQLite)
+volumes:
+  - /opt/recomp/data:/data
+
+env:
+  clear:
+    NODE_ENV: production
+    PORT: "3001"
+    DB_PATH: /data/recomp.db
+
+ssh:
+  user: ubuntu

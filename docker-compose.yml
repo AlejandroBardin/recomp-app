@@ -1,0 +1,11 @@
+services:
+  recomp:
+    build: .
+    ports:
+      - "3001:3001"
+    volumes:
+      - recomp-data:/data
+    restart: unless-stopped
+
+volumes:
+  recomp-data:
