@@ -363,6 +363,93 @@ app.post('/api/habits/:id/toggle', (req, res) => {
   res.json({ done: true, xp: habit.xp });
 });
 
+// ---------- Centro de ansiedad ----------
+// Registrar el episodio vale XP aunque no se haya resistido: lo que se
+// registra se puede mirar de frente, y el patrón horario es oro.
+const ANXIETY_XP_RESISTED = 25;
+const ANXIETY_XP_LOGGED = 5;
+
+app.post('/api/anxiety', (req, res) => {
+  const { intensity, cause, action, resisted, date, time } = req.body;
+  const d = date || todayStr();
+  const info = db.prepare(
+    'INSERT INTO anxiety_episodes (date, time, intensity, cause, action, resisted) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(
+    d,
+    time || nowTime(),
+    Math.max(1, Math.min(5, Number(intensity) || 3)),
+    (cause || '').trim() || null,
+    (action || '').trim() || null,
+    resisted ? 1 : 0
+  );
+  const xp = resisted ? ANXIETY_XP_RESISTED : ANXIETY_XP_LOGGED;
+  db.prepare('INSERT INTO xp_events (date, pillar, amount, source, ref_id, note) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(d, 'habitos', xp, 'anxiety', info.lastInsertRowid,
+         resisted ? 'Impulso superado' : 'Episodio registrado');
+  res.json({ ...db.prepare('SELECT * FROM anxiety_episodes WHERE id = ?').get(info.lastInsertRowid), xp });
+});
+
+app.get('/api/anxiety', (req, res) => {
+  const days = Math.min(Number(req.query.days) || 30, 90);
+  const episodes = db.prepare(
+    `SELECT * FROM anxiety_episodes WHERE date >= date('now','localtime',?) ORDER BY date DESC, time DESC`
+  ).all(`-${days} days`);
+  const byHour = db.prepare(`
+    SELECT CAST(substr(time, 1, 2) AS INTEGER) AS hour, COUNT(*) AS count
+    FROM anxiety_episodes GROUP BY hour ORDER BY hour
+  `).all();
+  const totals = db.prepare(
+    'SELECT COUNT(*) AS total, COALESCE(SUM(resisted), 0) AS resisted FROM anxiety_episodes'
+  ).get();
+  res.json({ episodes, stats: { ...totals, byHour } });
+});
+
+app.delete('/api/anxiety/:id', (req, res) => {
+  db.prepare('DELETE FROM anxiety_episodes WHERE id = ?').run(req.params.id);
+  db.prepare(`DELETE FROM xp_events WHERE source = 'anxiety' AND ref_id = ?`).run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ---------- Historial día por día (todo lo del día en una llamada) ----------
+app.get('/api/days', (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 30, 120);
+  const dates = db.prepare(`
+    SELECT date FROM (
+      SELECT date FROM food_entries
+      UNION SELECT date FROM exercise_logs
+      UNION SELECT date FROM habit_logs
+      UNION SELECT date FROM weight_entries
+      UNION SELECT date FROM anxiety_episodes
+      UNION SELECT date FROM xp_events
+    ) ORDER BY date DESC LIMIT ?
+  `).all(limit).map((r) => r.date);
+
+  const foodsBy = db.prepare('SELECT * FROM food_entries WHERE date = ? ORDER BY time ASC');
+  const logsBy = db.prepare('SELECT * FROM exercise_logs WHERE date = ? ORDER BY created_at ASC');
+  const habitsBy = db.prepare(
+    'SELECT h.name FROM habit_logs hl JOIN habits h ON h.id = hl.habit_id WHERE hl.date = ? ORDER BY h.sort'
+  );
+  const anxietyBy = db.prepare('SELECT * FROM anxiety_episodes WHERE date = ? ORDER BY time ASC');
+  const weightBy = db.prepare('SELECT weight FROM weight_entries WHERE date = ?');
+  const xpBy = db.prepare('SELECT COALESCE(SUM(amount), 0) AS s FROM xp_events WHERE date = ?');
+
+  res.json(dates.map((date) => {
+    const foods = foodsBy.all(date);
+    const exercises = logsBy.all(date);
+    return {
+      date,
+      consumed: Math.round(foods.reduce((a, f) => a + f.calories, 0)),
+      burned: Math.round(exercises.reduce((a, l) => a + l.calories, 0)),
+      weight: weightBy.get(date)?.weight ?? null,
+      xp: xpBy.get(date).s,
+      foods,
+      exercises,
+      habits: habitsBy.all(date).map((r) => r.name),
+      anxiety: anxietyBy.all(date)
+    };
+  }));
+});
+
 // ---------- Personaje (nivel, XP, tiers del avatar, racha) ----------
 function computeStreaks() {
   const dates = db.prepare('SELECT DISTINCT date FROM xp_events ORDER BY date ASC').all().map((r) => r.date);

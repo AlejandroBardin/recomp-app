@@ -82,6 +82,17 @@ CREATE TABLE IF NOT EXISTS habit_logs (
   UNIQUE(date, habit_id)
 );
 
+CREATE TABLE IF NOT EXISTS anxiety_episodes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT NOT NULL,
+  time TEXT NOT NULL,
+  intensity INTEGER NOT NULL DEFAULT 3,
+  cause TEXT,
+  action TEXT,
+  resisted INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
 CREATE TABLE IF NOT EXISTS xp_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date TEXT NOT NULL,
@@ -96,6 +107,7 @@ CREATE TABLE IF NOT EXISTS xp_events (
 CREATE INDEX IF NOT EXISTS idx_exercise_logs_date ON exercise_logs(date);
 CREATE INDEX IF NOT EXISTS idx_food_entries_date ON food_entries(date);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON habit_logs(date);
+CREATE INDEX IF NOT EXISTS idx_anxiety_date ON anxiety_episodes(date);
 CREATE INDEX IF NOT EXISTS idx_xp_events_date ON xp_events(date);
 CREATE INDEX IF NOT EXISTS idx_xp_events_pillar ON xp_events(pillar);
 `);

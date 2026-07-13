@@ -16,11 +16,101 @@ const RATES = [
   { value: 1, label: '1% por semana (máximo razonable)' }
 ];
 
+function DayHistory({ days }) {
+  const [open, setOpen] = useState(null);
+  if (days.length === 0) return null;
+
+  return (
+    <div className="card">
+      <h2>Historial día por día</h2>
+      <div className="entry-list">
+        {days.map((d) => (
+          <div key={d.date} className="day-block">
+            <button className="day-head" onClick={() => setOpen(open === d.date ? null : d.date)}>
+              <div className="entry-main">
+                <div className="entry-name">{fmtDate(d.date)}</div>
+                <div className="entry-sub">
+                  {d.consumed > 0 ? `${d.consumed} kcal` : 'sin comidas'}
+                  {d.burned > 0 ? ` · ${d.burned} quemadas` : ''}
+                  {d.habits.length > 0 ? ` · ${d.habits.length} misiones` : ''}
+                </div>
+              </div>
+              <div className="day-badges">
+                {d.weight != null && <span className="tag">{d.weight} kg</span>}
+                {d.anxiety.length > 0 && (
+                  <span className="tag">
+                    {d.anxiety.every((a) => a.resisted) ? '💪' : '😮‍💨'} {d.anxiety.length}
+                  </span>
+                )}
+                {d.xp > 0 && <span className="day-xp">+{d.xp}</span>}
+                <span className="day-caret">{open === d.date ? '▾' : '▸'}</span>
+              </div>
+            </button>
+            {open === d.date && (
+              <div className="day-detail">
+                {d.foods.length > 0 && (
+                  <div className="day-section">
+                    <span className="day-section-title">Comidas</span>
+                    {d.foods.map((f) => (
+                      <div key={f.id} className="day-line">
+                        <span>{f.time} · {f.name}{f.impulsive ? ' · fuera de hambre' : ''}</span>
+                        <span>{Math.round(f.calories)} kcal</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {d.exercises.length > 0 && (
+                  <div className="day-section">
+                    <span className="day-section-title">Ejercicio</span>
+                    {d.exercises.map((l) => (
+                      <div key={l.id} className="day-line">
+                        <span>
+                          {l.exercise_name}
+                          {l.sets ? ` ${l.sets}×${l.reps ?? '—'}` : ''}
+                          {l.minutes ? ` ${l.minutes} min` : ''}
+                        </span>
+                        <span>~{Math.round(l.calories)} kcal</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {d.habits.length > 0 && (
+                  <div className="day-section">
+                    <span className="day-section-title">Misiones</span>
+                    {d.habits.map((name) => (
+                      <div key={name} className="day-line"><span>✓ {name}</span></div>
+                    ))}
+                  </div>
+                )}
+                {d.anxiety.length > 0 && (
+                  <div className="day-section">
+                    <span className="day-section-title">Ansiedad</span>
+                    {d.anxiety.map((a) => (
+                      <div key={a.id} className="day-line">
+                        <span>
+                          {a.time} · intensidad {a.intensity}
+                          {a.cause ? ` · ${a.cause}` : ''}
+                        </span>
+                        <span>{a.resisted ? 'superado 💪' : 'cayó'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Progress() {
   const [profile, setProfile] = useState(null);
   const [summary, setSummary] = useState(null);
   const [weights, setWeights] = useState([]);
   const [energy, setEnergy] = useState(null);
+  const [days, setDays] = useState([]);
   const [form, setForm] = useState(null);
   const [newWeight, setNewWeight] = useState('');
   const [weightDate, setWeightDate] = useState(todayStr());
@@ -41,6 +131,7 @@ export default function Progress() {
     api.get('/api/summary').then(setSummary).catch(() => {});
     api.get('/api/weights').then(setWeights).catch(() => {});
     api.get('/api/energy?days=30').then(setEnergy).catch(() => {});
+    api.get('/api/days?limit=60').then(setDays).catch(() => {});
   }, []);
 
   useEffect(refresh, [refresh]);
@@ -217,6 +308,8 @@ export default function Progress() {
           </p>
         </div>
       ) : null}
+
+      <DayHistory days={days} />
 
       <form className="card" onSubmit={saveProfile}>
         <h2>Perfil</h2>

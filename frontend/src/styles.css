@@ -517,6 +517,141 @@ datalist { display: none; }
 .mission.done .mission-name { color: var(--ink-2); text-decoration: line-through; }
 .mission.done .mission-xp { color: var(--accent); }
 
+/* ---------- Hoy: barra de calorías y chips del header ---------- */
+.today-chips { display: flex; gap: 6px; }
+.streak.xp { color: var(--accent); }
+.cal-card { gap: 8px; }
+.cal-head { display: flex; justify-content: space-between; font-size: 0.9rem; }
+.cal-pct { font-weight: 700; font-variant-numeric: tabular-nums; }
+.cal-pct.over { color: #c2571f; }
+.cal-bar-track {
+  width: 100%;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.cal-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), #7db4ef);
+  transition: width 0.5s ease;
+}
+.cal-bar-fill.over { background: linear-gradient(90deg, #d3712f, #c2571f); }
+
+/* ---------- Centro de ansiedad ---------- */
+.sos-btn {
+  position: fixed;
+  right: max(16px, calc(50% - 240px + 16px));
+  bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  z-index: 20;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--accent);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.anx-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.anx-card {
+  width: 100%;
+  max-width: 420px;
+  position: relative;
+  gap: 14px;
+  padding: 22px 18px;
+}
+.anx-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.6rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 6px;
+}
+.breath-wrap {
+  position: relative;
+  height: 190px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.breath-circle {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-soft), var(--accent));
+  opacity: 0.85;
+}
+.breath-label {
+  position: absolute;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--ink);
+  text-shadow: 0 0 8px var(--bg);
+}
+.intensity-row { display: flex; gap: 8px; }
+.intensity-row .chip { flex: 1; text-align: center; }
+.center-block { display: flex; flex-direction: column; gap: 6px; }
+.anx-xp { font-size: 1.6rem; font-weight: 800; color: var(--accent); }
+
+/* ---------- Historial día por día ---------- */
+.day-block { border-bottom: 1px solid var(--grid); }
+.day-block:last-child { border-bottom: none; }
+.day-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 2px;
+  background: none;
+  border: none;
+  font-family: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.day-badges { display: flex; align-items: center; gap: 6px; }
+.day-xp { font-size: 0.8rem; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.day-caret { color: var(--muted); font-size: 0.8rem; }
+.day-detail { padding: 0 2px 12px; display: flex; flex-direction: column; gap: 10px; }
+.day-section { display: flex; flex-direction: column; gap: 3px; }
+.day-section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.day-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+.day-line span:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
 /* ---------- Pilares ---------- */
 .pillar-row { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; }
 .pillar-name { flex: 0 0 132px; }

@@ -31,13 +31,23 @@ Abrir **http://localhost:5173**. El dev server de Vite proxya `/api` al backend.
 ```
 backend/
   src/db.js       esquema SQLite + 9 ejercicios base precargados
-  src/server.js   API REST (ejercicios, logs, comidas, pesos, perfil, resumen)
+  src/server.js   API REST (ejercicios, logs, comidas, pesos, perfil, resumen,
+                  ansiedad, historial /api/days)
   src/seed.js     datos de ejemplo (idempotente: solo carga si no hay datos)
   data/recomp.db  la base de datos (se crea sola; backupeá este archivo)
 frontend/
-  src/views/      Hoy · Ejercicio · Comida · Progreso
-  src/components/WeightChart.jsx
+  src/views/      Héroe · Hoy · Ejercicio · Comida · Progreso (con historial)
+  src/components/ WeightChart · Avatar · AnxietyFlow (botón SOS global)
 ```
+
+## Centro de ansiedad
+
+Botón **SOS** flotante, visible en toda la app. Abre un flujo guiado de tres
+pasos: respiración 4-4-6 (4 rondas), una acción concreta a elegir (agua,
+caminar, flexiones, etc.) y el registro del episodio (intensidad 1–5,
+disparador opcional, si pasó el impulso). Superar el impulso da 25 XP del
+pilar Hábitos; registrarlo igual da 5 (lo que se registra se puede mirar de
+frente). Los episodios aparecen en el historial día por día de **Progreso**.
 
 ## Cálculos
 

@@ -170,6 +170,7 @@ export default function Today() {
   const [foods, setFoods] = useState([]);
   const [logs, setLogs] = useState([]);
   const [exercises, setExercises] = useState([]);
+  const [character, setCharacter] = useState(null);
 
   const refresh = useCallback(() => {
     Promise.all([api.get('/api/summary'), api.get('/api/food'), api.get('/api/logs')])
@@ -179,6 +180,7 @@ export default function Today() {
         setLogs(l);
       })
       .catch(() => {});
+    api.get('/api/character').then(setCharacter).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -191,9 +193,44 @@ export default function Today() {
   // déficit real de hoy contra el gasto total: negativo = quemando grasa
   const todayDeficit = t ? t.tdee + summary.burned - summary.consumed : null;
 
+  const calPct = t && t.targetCalories > 0 ? Math.round((summary.net / t.targetCalories) * 100) : null;
+
   return (
     <>
-      <h1>Hoy</h1>
+      <div className="hero-head">
+        <h1>Hoy</h1>
+        {character && (
+          <div className="today-chips">
+            {character.streak.current > 0 && (
+              <span className="streak">🔥 {character.streak.current}</span>
+            )}
+            {character.todayXp > 0 && <span className="streak xp">+{character.todayXp} XP</span>}
+          </div>
+        )}
+      </div>
+
+      {t ? (
+        <div className="card cal-card">
+          <div className="cal-head">
+            <span>
+              <strong>{summary.net}</strong> / {t.targetCalories} kcal netas
+            </span>
+            <span className={`cal-pct ${calPct > 100 ? 'over' : ''}`}>{calPct}%</span>
+          </div>
+          <div className="cal-bar-track">
+            <div
+              className={`cal-bar-fill ${calPct > 100 ? 'over' : ''}`}
+              style={{ width: `${Math.min(100, Math.max(0, calPct))}%` }}
+            />
+          </div>
+          <span className="muted">
+            {margin >= 0
+              ? `Te quedan ${margin} kcal de margen para hoy.`
+              : `Te pasaste ${-margin} kcal del objetivo. Una caminata ayuda.`}
+          </span>
+        </div>
+      ) : null}
+
       <div className="tile-grid">
         <StatTile label="Consumidas" value={summary ? `${summary.consumed}` : '—'} hint="kcal" />
         <StatTile

@@ -4,6 +4,7 @@ import Exercises from './views/Exercises.jsx';
 import Foods from './views/Foods.jsx';
 import Progress from './views/Progress.jsx';
 import Hero from './views/Hero.jsx';
+import AnxietyFlow from './components/AnxietyFlow.jsx';
 
 const ICONS = {
   heroe: (
@@ -44,13 +45,23 @@ const TABS = [
 
 export default function App() {
   const [tab, setTab] = useState('hoy');
+  const [sos, setSos] = useState(false);
+  // sube al cerrar el SOS: remonta la vista activa para que refresque su data
+  const [sosSeq, setSosSeq] = useState(0);
   const { View } = TABS.find((t) => t.id === tab);
+
+  const closeSos = () => {
+    setSos(false);
+    setSosSeq((s) => s + 1);
+  };
 
   return (
     <div className="app">
       <main className="content">
-        <View />
+        <View key={`${tab}-${sosSeq}`} />
       </main>
+      <button className="sos-btn" onClick={() => setSos(true)}>SOS</button>
+      {sos && <AnxietyFlow onClose={closeSos} />}
       <nav className="bottom-nav">
         {TABS.map((t) => (
           <button
