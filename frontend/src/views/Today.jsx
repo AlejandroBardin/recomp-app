@@ -167,7 +167,7 @@ function QuickFood({ onSaved }) {
   );
 }
 
-function QuickExercise({ exercises, onSaved }) {
+function QuickExercise({ exercises, onSaved, weight }) {
   const [openId, setOpenId] = useState(null);
   const [sets, setSets] = useState('3');
   const [reps, setReps] = useState('8');
@@ -198,6 +198,16 @@ function QuickExercise({ exercises, onSaved }) {
   return (
     <div className="card">
       <h2>Marcar ejercicio</h2>
+      {!weight && (
+        // Las calorías salen de MET × peso × tiempo: sin un peso cargado la
+        // cuenta da 0 y el registro queda así guardado. Antes esto pasaba en
+        // silencio y el número quedaba roto sin que nadie se enterara.
+        <p className="warn">
+          Cargá tu peso en <strong>Progreso</strong> antes de registrar: sin él no se pueden
+          calcular las calorías. Los registros que hagas ahora quedan en 0 kcal, y se recalculan
+          solos apenas cargues el primero.
+        </p>
+      )}
       <div className="chip-grid">
         {exercises.map((ex) => (
           <button
@@ -327,7 +337,7 @@ export default function Today() {
       ) : null}
 
       <QuickFood onSaved={refresh} />
-      <QuickExercise exercises={exercises} onSaved={refresh} />
+      <QuickExercise exercises={exercises} weight={summary?.weight} onSaved={refresh} />
 
       <div className="card">
         <h2>Comidas de hoy</h2>

@@ -31,6 +31,19 @@ function latestWeight() {
   return row ? row.weight : null;
 }
 
+// El peso que tenías a esa fecha: el último pesaje anterior o igual. Si el
+// registro es previo a tu primer pesaje, se usa ese primero, que es la mejor
+// aproximación que hay. Lo usan tanto el alta como el recálculo, para que un
+// registro con fecha pasada no dependa de por dónde entró.
+function pesoEnFecha(date) {
+  const row = db.prepare(
+    'SELECT weight FROM weight_entries WHERE date <= ? ORDER BY date DESC LIMIT 1'
+  ).get(date);
+  if (row) return row.weight;
+  const primero = db.prepare('SELECT weight FROM weight_entries ORDER BY date ASC LIMIT 1').get();
+  return primero ? primero.weight : null;
+}
+
 // kcal = MET × 3.5 × peso(kg) / 200 × minutos (Compendium of Physical Activities)
 // Ejercicios por series: cada rep ≈ 6 s de trabajo efectivo. A 97 kg da
 // ~1.2 kcal por dominada, en línea con los estudios (1.0-1.6 kcal/rep a 70 kg).
@@ -38,6 +51,49 @@ function estimateCalories(met, weight, { minutes, sets, reps }) {
   const mins = minutes || ((sets || 0) * (reps || 10) * 6) / 60;
   if (!mins || !weight) return 0;
   return Math.round((met * 3.5 * weight / 200) * mins);
+}
+
+// Un registro guardado sin ningún peso cargado quedó en 0 kcal, y la columna
+// `calories` es almacenada, no calculada: sin esto se queda en 0 para siempre
+// y arrastra con él el balance energético y la grasa estimada.
+//
+// Se recalcula con el peso vigente a la fecha del registro (el último anterior
+// o igual); para los que son previos a tu primer pesaje se usa ese primero,
+// que es la mejor aproximación disponible. El XP se rehace igual que en el
+// resto de la app: se borra el evento por source + ref_id y se inserta el nuevo.
+function recalcularRegistrosSinPeso() {
+  const primero = db.prepare('SELECT weight FROM weight_entries ORDER BY date ASC LIMIT 1').get();
+  if (!primero) return 0; // todavía no hay con qué recalcular
+
+  const pendientes = db.prepare(`
+    SELECT l.*, e.met FROM exercise_logs l
+    LEFT JOIN exercises e ON e.id = l.exercise_id
+    WHERE l.calories = 0
+  `).all();
+  if (pendientes.length === 0) return 0;
+
+  const actualizar = db.prepare('UPDATE exercise_logs SET calories = ? WHERE id = ?');
+  const borrarXp = db.prepare(`DELETE FROM xp_events WHERE source = 'exercise' AND ref_id = ?`);
+  const insertarXp = db.prepare(
+    'INSERT INTO xp_events (date, pillar, amount, source, ref_id, note) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+
+  const corregir = db.transaction((filas) => {
+    let n = 0;
+    for (const l of filas) {
+      if (l.met == null) continue; // el ejercicio ya no existe: no hay MET con qué calcular
+      const peso = pesoEnFecha(l.date);
+      const kcal = estimateCalories(l.met, peso, { minutes: l.minutes, sets: l.sets, reps: l.reps });
+      if (!(kcal > 0)) continue;
+      actualizar.run(kcal, l.id);
+      borrarXp.run(l.id);
+      insertarXp.run(l.date, 'fisico', exerciseXp(kcal), 'exercise', l.id, l.exercise_name);
+      n++;
+    }
+    return n;
+  });
+
+  return corregir(pendientes);
 }
 
 // ---------- Ejercicios ----------
@@ -153,7 +209,8 @@ app.post('/api/logs', (req, res) => {
   const { exercise_id, sets, reps, minutes, date } = req.body;
   const ex = db.prepare('SELECT * FROM exercises WHERE id = ?').get(exercise_id);
   if (!ex) return res.status(404).json({ error: 'Ejercicio no encontrado' });
-  const weight = latestWeight() || 0;
+  const fecha = date || todayStr();
+  const weight = pesoEnFecha(fecha) || 0;
   const calories = estimateCalories(ex.met, weight, {
     minutes: Number(minutes) || null,
     sets: Number(sets) || null,
@@ -161,10 +218,10 @@ app.post('/api/logs', (req, res) => {
   });
   const info = db.prepare(
     'INSERT INTO exercise_logs (date, exercise_id, exercise_name, sets, reps, minutes, calories) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(date || todayStr(), ex.id, ex.name, Number(sets) || null, Number(reps) || null, Number(minutes) || null, calories);
+  ).run(fecha, ex.id, ex.name, Number(sets) || null, Number(reps) || null, Number(minutes) || null, calories);
   const xp = exerciseXp(calories);
   db.prepare('INSERT INTO xp_events (date, pillar, amount, source, ref_id, note) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(date || todayStr(), 'fisico', xp, 'exercise', info.lastInsertRowid, ex.name);
+    .run(fecha, 'fisico', xp, 'exercise', info.lastInsertRowid, ex.name);
   res.json({ ...db.prepare('SELECT * FROM exercise_logs WHERE id = ?').get(info.lastInsertRowid), xp });
 });
 
@@ -264,6 +321,10 @@ app.post('/api/weights', (req, res) => {
   `).run(d, w);
   const row = db.prepare('SELECT * FROM weight_entries WHERE date = ?').get(d);
 
+  // Cargar un peso es lo que desbloquea el cálculo de calorías: los registros
+  // de ejercicio que habían quedado en 0 por no tenerlo se arreglan acá.
+  const recalculados = recalcularRegistrosSinPeso();
+
   // XP por nuevo mínimo histórico (cada kg perdido es un logro desbloqueado)
   db.prepare(`DELETE FROM xp_events WHERE source = 'weight' AND ref_id = ?`).run(row.id);
   const bestPrev = db.prepare('SELECT MIN(weight) AS m FROM weight_entries WHERE date < ?').get(d).m;
@@ -273,7 +334,7 @@ app.post('/api/weights', (req, res) => {
     db.prepare('INSERT INTO xp_events (date, pillar, amount, source, ref_id, note) VALUES (?, ?, ?, ?, ?, ?)')
       .run(d, 'fisico', xp, 'weight', row.id, `-${(bestPrev - w).toFixed(1)} kg`);
   }
-  res.json({ ...row, xp });
+  res.json({ ...row, xp, recalculados });
 });
 
 app.delete('/api/weights/:id', (req, res) => {
@@ -611,6 +672,11 @@ if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 }
+
+// Backfill al arrancar: si ya hay peso cargado y quedaron registros en 0 de
+// antes de este arreglo, se corrigen sin esperar a que cargues un peso nuevo.
+const corregidos = recalcularRegistrosSinPeso();
+if (corregidos > 0) console.log(`Recalculadas las calorías de ${corregidos} registro(s) de ejercicio`);
 
 app.listen(PORT, () => {
   console.log(`Backend corriendo en http://localhost:${PORT}`);

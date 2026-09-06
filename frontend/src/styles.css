@@ -789,3 +789,17 @@ button.ghost.danger { color: #d8544a; border-color: #d8544a; }
 }
 .seg-btn:last-child { border-right: none; }
 .seg-btn.on { background: var(--accent); color: #fff; font-weight: 600; }
+
+/* Aviso de algo que hay que resolver para que la app funcione bien, a
+   diferencia de .note, que solo explica. */
+.warn {
+  padding: 10px 12px;
+  border: 1px solid #d8a13a;
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: rgba(216, 161, 58, 0.08);
+  color: var(--ink-2);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.warn strong { color: var(--ink); }

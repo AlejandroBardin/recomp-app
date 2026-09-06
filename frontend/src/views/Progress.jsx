@@ -209,6 +209,7 @@ export default function Progress() {
   const [newWeight, setNewWeight] = useState('');
   const [weightDate, setWeightDate] = useState(todayStr());
   const [savedMsg, setSavedMsg] = useState(false);
+  const [recalc, setRecalc] = useState(0);
 
   const refresh = useCallback(() => {
     api.get('/api/profile').then((p) => {
@@ -244,7 +245,11 @@ export default function Progress() {
   const addWeight = async (e) => {
     e.preventDefault();
     if (!newWeight) return;
-    await api.post('/api/weights', { date: weightDate, weight: Number(newWeight) });
+    // El backend aprovecha el peso nuevo para recalcular los registros de
+    // ejercicio que habían quedado en 0 kcal por no tenerlo. Vale decirlo:
+    // si no, los números del día cambian solos y no se entiende por qué.
+    const r = await api.post('/api/weights', { date: weightDate, weight: Number(newWeight) });
+    setRecalc(r.recalculados > 0 ? r.recalculados : 0);
     setNewWeight('');
     refresh();
   };
@@ -279,6 +284,12 @@ export default function Progress() {
             Guardar
           </button>
         </form>
+        {recalc > 0 ? (
+          <p className="note">
+            Se recalcularon las calorías de {recalc} registro{recalc === 1 ? '' : 's'} de ejercicio
+            que habían quedado en 0 por no tener tu peso.
+          </p>
+        ) : null}
         {weights.length > 0 ? (
           <details>
             <summary className="muted" style={{ cursor: 'pointer' }}>
