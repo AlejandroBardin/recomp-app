@@ -14,8 +14,13 @@ function StatTile({ label, value, hint }) {
 function QuickFood({ onSaved }) {
   const [name, setName] = useState('');
   const [kcal, setKcal] = useState('');
+  // Un resultado de Open Food Facts trae kcal por 100 g, no de la porción:
+  // mientras haya uno elegido, se pide gramos y las calorías se calculan.
+  const [per100, setPer100] = useState(null);
+  const [grams, setGrams] = useState('');
   const [impulsive, setImpulsive] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
+  const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -23,24 +28,48 @@ function QuickFood({ onSaved }) {
       api.get(`/api/foods/suggest?q=${encodeURIComponent(name)}`)
         .then(setSuggestions)
         .catch(() => {});
-    }, 200);
+    }, 250);
     return () => clearTimeout(t);
   }, [name]);
 
+  const calculado = per100 != null
+    ? Math.round((per100 * (Number(grams) || 0)) / 100)
+    : Number(kcal);
+
   const handleName = (value) => {
     setName(value);
-    const match = suggestions.find((s) => s.name.toLowerCase() === value.toLowerCase());
-    if (match) setKcal(String(match.calories));
+    setOpen(true);
+    // Si reescribe el nombre a mano, el producto elegido deja de aplicar.
+    if (per100 != null) { setPer100(null); setGrams(''); }
+  };
+
+  const elegir = (s) => {
+    setOpen(false);
+    if (s.source === 'off') {
+      // La marca va en el nombre porque frequent_foods tiene UNIQUE(name):
+      // dos "Yogur" de marcas distintas se pisarían las calorías entre sí.
+      setName(s.brand ? `${s.name} (${s.brand})` : s.name);
+      setPer100(s.kcalPer100g);
+      setGrams('100');
+      setKcal('');
+    } else {
+      setName(s.name);
+      setPer100(null);
+      setGrams('');
+      setKcal(String(Math.round(s.calories)));
+    }
   };
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!name.trim() || kcal === '') return;
+    if (!name.trim() || !(calculado > 0)) return;
     setSaving(true);
     try {
-      await api.post('/api/food', { name, calories: Number(kcal), impulsive });
+      await api.post('/api/food', { name, calories: calculado, impulsive });
       setName('');
       setKcal('');
+      setPer100(null);
+      setGrams('');
       setImpulsive(false);
       onSaved();
     } finally {
@@ -55,30 +84,73 @@ function QuickFood({ onSaved }) {
         <label>
           Qué comiste
           <input
-            list="food-suggestions"
             value={name}
             onChange={(e) => handleName(e.target.value)}
+            onFocus={() => setOpen(true)}
             placeholder="ej. café con leche"
             autoComplete="off"
           />
         </label>
-        <label style={{ flex: '0 0 96px' }}>
-          kcal
-          <input
-            type="number"
-            inputMode="numeric"
-            min="0"
-            value={kcal}
-            onChange={(e) => setKcal(e.target.value)}
-            placeholder="0"
-          />
-        </label>
+        {per100 != null ? (
+          <label style={{ flex: '0 0 84px' }}>
+            gramos
+            <input
+              type="number"
+              inputMode="numeric"
+              min="1"
+              value={grams}
+              onChange={(e) => setGrams(e.target.value)}
+              placeholder="100"
+            />
+          </label>
+        ) : (
+          <label style={{ flex: '0 0 96px' }}>
+            kcal
+            <input
+              type="number"
+              inputMode="numeric"
+              min="0"
+              value={kcal}
+              onChange={(e) => setKcal(e.target.value)}
+              placeholder="0"
+            />
+          </label>
+        )}
       </div>
-      <datalist id="food-suggestions">
-        {suggestions.map((s) => (
-          <option key={s.name} value={s.name}>{`${s.calories} kcal`}</option>
-        ))}
-      </datalist>
+
+      {per100 != null && (
+        <p className="muted portion-hint">
+          {per100} kcal por 100 g → <strong>{calculado} kcal</strong>
+          <button
+            type="button"
+            className="ghost small"
+            onClick={() => { setPer100(null); setGrams(''); setKcal(String(calculado || '')); }}
+          >
+            poner kcal a mano
+          </button>
+        </p>
+      )}
+
+      {open && suggestions.length > 0 && (
+        <div className="suggest-list">
+          {suggestions.map((s) => (
+            <button
+              type="button"
+              key={`${s.source}-${s.name}`}
+              className="suggest"
+              onClick={() => elegir(s)}
+            >
+              <span className="suggest-name">{s.name}</span>
+              <span className="suggest-meta">
+                {s.source === 'off'
+                  ? `${s.brand ? s.brand + ' · ' : ''}${s.kcalPer100g} kcal/100 g`
+                  : `${Math.round(s.calories)} kcal`}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="row">
         <button
           type="button"
@@ -87,7 +159,7 @@ function QuickFood({ onSaved }) {
         >
           {impulsive ? '✓ ' : ''}fuera de hambre real
         </button>
-        <button className="primary shrink" disabled={saving || !name.trim() || kcal === ''}>
+        <button className="primary shrink" disabled={saving || !name.trim() || !(calculado > 0)}>
           Guardar
         </button>
       </div>

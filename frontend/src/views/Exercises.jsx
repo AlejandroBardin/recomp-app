@@ -1,13 +1,35 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, fmtDate } from '../api.js';
+import MuscleMap from '../components/MuscleMap.jsx';
 
 const TYPES = ['tren superior', 'cardio bajo impacto', 'core', 'otro'];
 
-const EMPTY = { name: '', type: 'tren superior', met: '4', unit: 'series' };
+const EMPTY = {
+  name: '', type: 'tren superior', met: '4', unit: 'series',
+  primary_muscles: [], secondary_muscles: []
+};
 
-function ExerciseForm({ initial, onDone, onCancel }) {
+// Las columnas vienen como JSON de la base; el formulario trabaja con arrays.
+const parseMusculos = (v) => {
+  if (Array.isArray(v)) return v;
+  try { return JSON.parse(v) || []; } catch { return []; }
+};
+
+function ExerciseForm({ initial, catalogo, onDone, onCancel }) {
   const [form, setForm] = useState(initial);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  // Un músculo está en principal o en secundario, nunca en los dos: marcarlo
+  // en uno lo saca del otro.
+  const toggleMusculo = (campo, clave) => {
+    const otro = campo === 'primary_muscles' ? 'secondary_muscles' : 'primary_muscles';
+    const actual = form[campo] || [];
+    setForm({
+      ...form,
+      [campo]: actual.includes(clave) ? actual.filter((k) => k !== clave) : [...actual, clave],
+      [otro]: (form[otro] || []).filter((k) => k !== clave)
+    });
+  };
 
   const save = async (e) => {
     e.preventDefault();
@@ -45,6 +67,30 @@ function ExerciseForm({ initial, onDone, onCancel }) {
           <option value="minutos">minutos</option>
         </select>
       </label>
+      {catalogo.length > 0 && (
+        <div style={{ flexBasis: '100%' }}>
+          {[
+            ['primary_muscles', 'Músculo principal'],
+            ['secondary_muscles', 'Secundarios (cuentan la mitad)']
+          ].map(([campo, etiqueta]) => (
+            <div key={campo} className="musc-pick">
+              <span className="musc-pick-label">{etiqueta}</span>
+              <div className="chip-grid">
+                {catalogo.map((m) => (
+                  <button
+                    type="button"
+                    key={m.key}
+                    className={`chip ${(form[campo] || []).includes(m.key) ? 'selected' : ''}`}
+                    onClick={() => toggleMusculo(campo, m.key)}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <button className="primary shrink">Guardar</button>
       <button type="button" className="ghost shrink" onClick={onCancel}>
         Cancelar
@@ -57,11 +103,22 @@ export default function Exercises() {
   const [exercises, setExercises] = useState([]);
   const [history, setHistory] = useState([]);
   const [editing, setEditing] = useState(null); // null | 'new' | exercise
+  const [muscles, setMuscles] = useState(null);
+  const [dias, setDias] = useState(30);
 
   const refresh = useCallback(() => {
     api.get('/api/exercises').then(setExercises).catch(() => {});
     api.get('/api/logs/history?days=14').then(setHistory).catch(() => {});
   }, []);
+
+  // El endpoint devuelve los 16 músculos dibujables con su etiqueta, así que
+  // sirve de mapa y de catálogo para el selector: no hace falta repetir la
+  // taxonomía acá.
+  useEffect(() => {
+    api.get(`/api/muscles?days=${dias}`).then(setMuscles).catch(() => {});
+    // `history` cambia cada vez que se guarda un registro o un ejercicio, que
+    // es exactamente cuando el mapa quedó viejo.
+  }, [dias, history]);
 
   useEffect(refresh, [refresh]);
 
@@ -100,7 +157,13 @@ export default function Exercises() {
               </div>
               {editing?.id === ex.id ? (
                 <ExerciseForm
-                  initial={{ ...ex, met: String(ex.met) }}
+                  catalogo={muscles?.muscles ?? []}
+                  initial={{
+                    ...ex,
+                    met: String(ex.met),
+                    primary_muscles: parseMusculos(ex.primary_muscles),
+                    secondary_muscles: parseMusculos(ex.secondary_muscles)
+                  }}
                   onDone={() => {
                     setEditing(null);
                     refresh();
@@ -113,6 +176,7 @@ export default function Exercises() {
         </div>
         {editing === 'new' ? (
           <ExerciseForm
+            catalogo={muscles?.muscles ?? []}
             initial={EMPTY}
             onDone={() => {
               setEditing(null);
@@ -125,6 +189,29 @@ export default function Exercises() {
             + Agregar ejercicio
           </button>
         )}
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <h2>Mapa muscular</h2>
+          <div className="seg">
+            {[30, 90, 365].map((d) => (
+              <button
+                key={d}
+                type="button"
+                className={`seg-btn ${dias === d ? 'on' : ''}`}
+                onClick={() => setDias(d)}
+              >
+                {d === 365 ? 'año' : `${d}d`}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="muted">
+          Volumen en series equivalentes: un ejercicio por tiempo cuenta un décimo de sus minutos,
+          y el músculo secundario, la mitad.
+        </p>
+        <MuscleMap data={muscles} />
       </div>
 
       <div className="card">

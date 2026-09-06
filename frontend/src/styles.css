@@ -703,3 +703,89 @@ button.ghost.danger { color: #d8544a; border-color: #d8544a; }
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
+
+/* ---------- Sugerencias de alimentos ---------- */
+/* Reemplaza al <datalist> nativo, que no puede mostrar marca ni kcal/100 g
+   ni disparar el flujo de gramos de un producto de Open Food Facts. */
+.suggest-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.suggest {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 0;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  font-family: inherit;
+  font-size: 0.88rem;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.suggest:last-child { border-bottom: none; }
+.suggest:hover { background: var(--bg); }
+.suggest-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest-meta {
+  flex: 0 0 auto;
+  font-size: 0.74rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.portion-hint { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Mapa muscular ---------- */
+.mmap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: end;
+}
+.mmap-fig { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.mmap-fig svg { width: 100%; max-width: 150px; height: auto; }
+.mmap-fig figcaption { font-size: 0.75rem; }
+.mmap-name {
+  flex: 0 0 104px;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Selector de músculos del formulario de ejercicio */
+.musc-pick { margin-top: 10px; }
+.musc-pick-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+/* Selector de período (30d / 90d / año) */
+.seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg-btn {
+  min-height: 0;
+  padding: 4px 9px;
+  background: none;
+  border: none;
+  border-right: 1px solid var(--border);
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.seg-btn:last-child { border-right: none; }
+.seg-btn.on { background: var(--accent); color: #fff; font-weight: 600; }

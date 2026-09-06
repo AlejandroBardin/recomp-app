@@ -130,6 +130,30 @@ if (count === 0) {
   for (const e of BASE_EXERCISES) insert.run(e.name, e.type, e.met, e.unit);
 }
 
+// ---------- Migración de columnas ----------
+// CREATE TABLE IF NOT EXISTS no toca una tabla que ya existe, y la base de
+// producción ya está creada con datos adentro. Esto agrega columnas nuevas
+// una sola vez, sin perder nada.
+const agregarColumna = (tabla, columna, definicion) => {
+  const existe = db.prepare(`PRAGMA table_info(${tabla})`).all().some((c) => c.name === columna);
+  if (!existe) db.exec(`ALTER TABLE ${tabla} ADD COLUMN ${columna} ${definicion}`);
+};
+
+agregarColumna('exercises', 'primary_muscles', 'TEXT');
+agregarColumna('exercises', 'secondary_muscles', 'TEXT');
+
+// Músculos de los ejercicios base, tomados de free-exercise-db. Solo completa
+// los que todavía no los tienen, así corre igual sobre una base ya cargada.
+// Un ejercicio propio que no esté en el mapa queda sin músculos hasta que se
+// los asignes: no se le inventan.
+const { EXERCISE_MUSCLES } = require('./musculos');
+const setMusculos = db.prepare('UPDATE exercises SET primary_muscles = ?, secondary_muscles = ? WHERE id = ?');
+for (const ex of db.prepare('SELECT id, name, primary_muscles FROM exercises').all()) {
+  if (ex.primary_muscles != null) continue;
+  const m = EXERCISE_MUSCLES[ex.name];
+  if (m) setMusculos.run(JSON.stringify(m.primary), JSON.stringify(m.secondary), ex.id);
+}
+
 // Misiones diarias por pilar. El pilar "fisico" suma XP automáticamente
 // desde los registros de ejercicio y las bajadas de peso.
 const BASE_HABITS = [

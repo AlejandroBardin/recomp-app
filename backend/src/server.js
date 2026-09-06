@@ -3,6 +3,8 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const db = require('./db');
+const { buscarAlimentos } = require('./openfoodfacts');
+const { MUSCLES, MUSCLE_KEYS, esMusculoValido } = require('./musculos');
 const {
   levelFromXp, rankFor, exerciseXp, weightXp, bodyTier,
   SPIRIT_THRESHOLDS, GEAR_THRESHOLDS, tierFromThresholds, PILLARS
@@ -43,26 +45,94 @@ app.get('/api/exercises', (req, res) => {
   res.json(db.prepare('SELECT * FROM exercises WHERE active = 1 ORDER BY type, name').all());
 });
 
+// Los músculos llegan como arrays de claves de la taxonomía; se descarta
+// cualquiera que no exista en vez de guardar basura que después el mapa no
+// sabría dibujar. null = sin asignar (distinto de "no trabaja ninguno").
+const limpiarMusculos = (v) => {
+  if (!Array.isArray(v)) return null;
+  const ok = [...new Set(v.filter((k) => typeof k === 'string' && esMusculoValido(k)))];
+  return JSON.stringify(ok);
+};
+
 app.post('/api/exercises', (req, res) => {
-  const { name, type = 'otro', met = 3, unit = 'minutos' } = req.body;
+  const { name, type = 'otro', met = 3, unit = 'minutos', primary_muscles, secondary_muscles } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Falta el nombre' });
-  const info = db.prepare('INSERT INTO exercises (name, type, met, unit) VALUES (?, ?, ?, ?)')
-    .run(name.trim(), type, Number(met) || 3, unit);
+  const info = db.prepare(
+    'INSERT INTO exercises (name, type, met, unit, primary_muscles, secondary_muscles) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(name.trim(), type, Number(met) || 3, unit,
+        limpiarMusculos(primary_muscles), limpiarMusculos(secondary_muscles));
   res.json(db.prepare('SELECT * FROM exercises WHERE id = ?').get(info.lastInsertRowid));
 });
 
 app.put('/api/exercises/:id', (req, res) => {
-  const { name, type, met, unit } = req.body;
+  const { name, type, met, unit, primary_muscles, secondary_muscles } = req.body;
   const ex = db.prepare('SELECT * FROM exercises WHERE id = ?').get(req.params.id);
   if (!ex) return res.status(404).json({ error: 'No existe' });
-  db.prepare('UPDATE exercises SET name = ?, type = ?, met = ?, unit = ? WHERE id = ?')
-    .run(name ?? ex.name, type ?? ex.type, met != null ? Number(met) : ex.met, unit ?? ex.unit, req.params.id);
+  db.prepare(
+    'UPDATE exercises SET name = ?, type = ?, met = ?, unit = ?, primary_muscles = ?, secondary_muscles = ? WHERE id = ?'
+  ).run(name ?? ex.name, type ?? ex.type, met != null ? Number(met) : ex.met, unit ?? ex.unit,
+        primary_muscles !== undefined ? limpiarMusculos(primary_muscles) : ex.primary_muscles,
+        secondary_muscles !== undefined ? limpiarMusculos(secondary_muscles) : ex.secondary_muscles,
+        req.params.id);
   res.json(db.prepare('SELECT * FROM exercises WHERE id = ?').get(req.params.id));
 });
 
 app.delete('/api/exercises/:id', (req, res) => {
   db.prepare('UPDATE exercises SET active = 0 WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+});
+
+// ---------- Mapa muscular ----------
+// Volumen por músculo en "series equivalentes": un ejercicio por series aporta
+// sus series; uno por tiempo, un décimo de sus minutos (30 min de caminata ≈ 3
+// series). Es una convención para poder sumar peras con manzanas, no una
+// medida fisiológica. El músculo principal cuenta entero y el secundario la
+// mitad, que es como se cuentan las "series efectivas".
+app.get('/api/muscles', (req, res) => {
+  const days = Math.min(Number(req.query.days) || 30, 365);
+  const logs = db.prepare(`
+    SELECT l.sets, l.minutes, e.primary_muscles, e.secondary_muscles
+    FROM exercise_logs l
+    LEFT JOIN exercises e ON e.id = l.exercise_id
+    WHERE l.date >= date('now','localtime',?)
+  `).all(`-${days} days`);
+
+  const volumen = Object.fromEntries(MUSCLE_KEYS.map((k) => [k, 0]));
+  let sinAsignar = 0;
+
+  const parse = (s) => { try { return JSON.parse(s) || []; } catch { return []; } };
+
+  for (const l of logs) {
+    const unidades = l.sets != null ? l.sets : (l.minutes || 0) / 10;
+    if (!(unidades > 0)) continue;
+    const prim = parse(l.primary_muscles);
+    const sec = parse(l.secondary_muscles);
+    if (prim.length === 0 && sec.length === 0) { sinAsignar += unidades; continue; }
+    for (const k of prim) if (k in volumen) volumen[k] += unidades;
+    for (const k of sec) if (k in volumen) volumen[k] += unidades * 0.5;
+  }
+
+  const total = Object.values(volumen).reduce((a, b) => a + b, 0);
+  const max = Math.max(0, ...Object.values(volumen));
+  const musculos = MUSCLE_KEYS
+    .filter((k) => MUSCLES[k].view)
+    .map((k) => ({
+      key: k,
+      label: MUSCLES[k].label,
+      view: MUSCLES[k].view,
+      value: Math.round(volumen[k] * 10) / 10,
+      // Relativo al músculo más trabajado: es lo que colorea el mapa.
+      intensity: max > 0 ? volumen[k] / max : 0
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  res.json({
+    days,
+    total: Math.round(total * 10) / 10,
+    sinAsignar: Math.round(sinAsignar * 10) / 10,
+    muscles: musculos,
+    untrained: musculos.filter((m) => m.value === 0).map((m) => m.label)
+  });
 });
 
 // ---------- Registros de ejercicio ----------
@@ -148,11 +218,23 @@ app.delete('/api/food/:id', (req, res) => {
 // Búsqueda insensible a acentos y mayúsculas (el LIKE de SQLite no cubre "café" vs "cafe")
 const normalize = (s) => s.normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]', 'g'), '').toLowerCase();
 
-app.get('/api/foods/suggest', (req, res) => {
-  const q = normalize((req.query.q || '').trim());
+app.get('/api/foods/suggest', async (req, res) => {
+  const texto = (req.query.q || '').trim();
+  const q = normalize(texto);
   const rows = db.prepare('SELECT name, calories FROM frequent_foods ORDER BY times_used DESC, last_used DESC').all();
   const matches = q ? rows.filter((r) => normalize(r.name).includes(q)) : rows;
-  res.json(matches.slice(0, 8));
+
+  // Los tuyos primero y siempre: son los que de verdad comés, ya tienen las
+  // calorías de la porción que solés servirte, y salen de la base local
+  // aunque Open Food Facts esté caído.
+  const locales = matches.slice(0, 6)
+    .map((r) => ({ source: 'local', name: r.name, calories: r.calories }));
+
+  const yaEstan = new Set(locales.map((l) => normalize(l.name)));
+  const externos = (await buscarAlimentos(texto))
+    .filter((e) => !yaEstan.has(normalize(e.name)));
+
+  res.json([...locales, ...externos.slice(0, 6)]);
 });
 
 // Patrones: comidas impulsivas agrupadas por hora del día
