@@ -665,3 +665,41 @@ datalist { display: none; }
 }
 .pillar-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.5s ease; }
 .pillar-xp { flex: 0 0 52px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- Edición de misiones y borrado con confirmación ---------- */
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+button.ghost.small {
+  min-height: 0;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+}
+
+/* La misión sigue siendo el botón que se tilda; la × vive al lado, nunca
+   adentro, para no anidar botones. */
+.mission-row { display: flex; align-items: center; gap: 4px; }
+.mission-row .mission { flex: 1; min-width: 0; }
+
+/* Borrar es irreversible desde la UI (el backend hace baja lógica y no hay
+   pantalla para restaurar), así que siempre pasa por un segundo toque. */
+.del-confirm { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.del-confirm .ghost {
+  min-height: 0;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+}
+button.ghost.danger { color: #d8544a; border-color: #d8544a; }
+
+.mission-new {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}

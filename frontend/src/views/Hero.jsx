@@ -22,6 +22,10 @@ const PILLAR_ICONS = {
 
 const fmt = (n) => (n ?? 0).toLocaleString('es-AR');
 
+// Pilares que aceptan misiones a mano. "fisico" queda afuera a propósito: su XP
+// sale sola del ejercicio y de las bajadas de peso, no de tildar una casilla.
+const MANUAL_PILLARS = ['alimentacion', 'habitos', 'oracion', 'trabajo'];
+
 const RANK_STEPS = [
   [100, 'Guerrero Celestial'],
   [85, 'Guerrero Veterano'],
@@ -41,6 +45,9 @@ export default function Hero() {
   // stepper de desarrollo: simula niveles para previsualizar la progresión
   // visual del avatar sin tocar la XP real (0 = datos reales)
   const [devOffset, setDevOffset] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [confirmId, setConfirmId] = useState(null);
+  const [draft, setDraft] = useState({ name: '', pillar: 'habitos', xp: 10 });
   const prevLevel = useRef(null);
 
   const refresh = useCallback(() => {
@@ -70,6 +77,22 @@ export default function Hero() {
     } finally {
       refresh();
     }
+  };
+
+  const addHabit = async (e) => {
+    e.preventDefault();
+    if (!draft.name.trim()) return;
+    await api.post('/api/habits', draft);
+    setDraft({ name: '', pillar: draft.pillar, xp: draft.xp });
+    refresh();
+  };
+
+  // El backend hace baja lógica (active = 0), así que el historial de días
+  // anteriores sigue mostrando la misión y su XP.
+  const removeHabit = async (id) => {
+    setConfirmId(null);
+    await api.del(`/api/habits/${id}`);
+    refresh();
   };
 
   if (!character) return <h1>Héroe</h1>;
@@ -169,7 +192,15 @@ export default function Hero() {
       </div>
 
       <div className="card">
-        <h2>Misiones de hoy</h2>
+        <div className="card-head">
+          <h2>Misiones de hoy</h2>
+          <button
+            className="ghost small"
+            onClick={() => { setEditing(!editing); setConfirmId(null); }}
+          >
+            {editing ? 'Listo' : 'Editar'}
+          </button>
+        </div>
         <p className="muted">
           El físico también suma solo: cada ejercicio registrado y cada nuevo mínimo de peso dan XP.
         </p>
@@ -182,14 +213,63 @@ export default function Hero() {
               {c.pillars[pillar]?.today > 0 && <span className="mission-today">+{c.pillars[pillar].today} XP hoy</span>}
             </div>
             {list.map((h) => (
-              <button key={h.id} className={`mission ${h.done ? 'done' : ''}`} onClick={() => toggle(h)}>
-                <span className="mission-check">{h.done ? '✓' : ''}</span>
-                <span className="mission-name">{h.name}</span>
-                <span className="mission-xp">+{h.xp}</span>
-              </button>
+              <div className="mission-row" key={h.id}>
+                <button className={`mission ${h.done ? 'done' : ''}`} onClick={() => toggle(h)}>
+                  <span className="mission-check">{h.done ? '✓' : ''}</span>
+                  <span className="mission-name">{h.name}</span>
+                  <span className="mission-xp">+{h.xp}</span>
+                </button>
+                {editing && (confirmId === h.id ? (
+                  <span className="del-confirm">
+                    <button className="ghost danger" onClick={() => removeHabit(h.id)}>Borrar</button>
+                    <button className="ghost" onClick={() => setConfirmId(null)}>No</button>
+                  </span>
+                ) : (
+                  <button className="entry-del" aria-label="Borrar misión" onClick={() => setConfirmId(h.id)}>
+                    ×
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         ))}
+        {editing && (
+          <form className="mission-new" onSubmit={addHabit}>
+            <label>
+              Nueva misión
+              <input
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                placeholder="ej. leer 10 páginas"
+              />
+            </label>
+            <div className="row">
+              <label>
+                Pilar
+                <select
+                  value={draft.pillar}
+                  onChange={(e) => setDraft({ ...draft, pillar: e.target.value })}
+                >
+                  {MANUAL_PILLARS.map((p) => (
+                    <option key={p} value={p}>{PILLAR_ICONS[p]} {PILLAR_LABELS[p]}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ flex: '0 0 80px' }}>
+                XP
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="5"
+                  max="100"
+                  value={draft.xp}
+                  onChange={(e) => setDraft({ ...draft, xp: e.target.value })}
+                />
+              </label>
+              <button className="primary shrink" disabled={!draft.name.trim()}>Agregar</button>
+            </div>
+          </form>
+        )}
       </div>
 
       <div className="card">

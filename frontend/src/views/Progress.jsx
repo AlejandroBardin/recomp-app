@@ -105,12 +105,106 @@ function DayHistory({ days }) {
   );
 }
 
+// El backend ya guardaba todo esto desde el principio (GET /api/anxiety), pero
+// no habia donde verlo: el centro de ansiedad era de solo escritura. Mismo
+// grafico por hora que los patrones de comida en Foods.jsx.
+function AnxietyHistory({ data, onDelete }) {
+  const [confirmId, setConfirmId] = useState(null);
+  if (!data || data.stats.total === 0) return null;
+
+  const { episodes, stats } = data;
+  const maxCount = stats.byHour.length ? Math.max(...stats.byHour.map((h) => h.count)) : 0;
+  const resistedPct = Math.round((stats.resisted / stats.total) * 100);
+  // Con menos de 3 episodios el "pico" es ruido, no un patron.
+  const peak = stats.total >= 3 && stats.byHour.length
+    ? stats.byHour.reduce((a, b) => (b.count > a.count ? b : a))
+    : null;
+
+  return (
+    <div className="card">
+      <h2>Ansiedad</h2>
+      <div className="tile-grid">
+        <div className="tile">
+          <span className="tile-label">Episodios</span>
+          <span className="tile-value">{stats.total}</span>
+          <span className="tile-hint">registrados en total</span>
+        </div>
+        <div className="tile">
+          <span className="tile-label">Superados</span>
+          <span className="tile-value">{stats.resisted}</span>
+          <span className="tile-hint">{resistedPct}% de las veces</span>
+        </div>
+      </div>
+
+      {peak ? (
+        <p className="note">
+          Tus picos: <strong>{String(peak.hour).padStart(2, '0')} h</strong>. Saber la hora es
+          media batalla — cuando se acerca, tenés el plan listo.
+        </p>
+      ) : null}
+
+      <p className="muted">A qué hora aparecen. Solo información, sin culpa.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {stats.byHour.map((h) => (
+          <div className="pattern-row" key={h.hour}>
+            <span className="pattern-hour">{String(h.hour).padStart(2, '0')}:00</span>
+            <div className="pattern-bar-track">
+              <div className="pattern-bar" style={{ width: `${(h.count / maxCount) * 100}%` }} />
+            </div>
+            <span className="pattern-count">{h.count}</span>
+          </div>
+        ))}
+      </div>
+
+      {episodes.length > 0 ? (
+        <details>
+          <summary className="muted" style={{ cursor: 'pointer' }}>
+            Ver episodios ({episodes.length} en los últimos 90 días)
+          </summary>
+          <div className="entry-list">
+            {episodes.map((a) => (
+              <div className="entry" key={a.id}>
+                <div className="entry-main">
+                  <div className="entry-name">
+                    {fmtDate(a.date)} · {a.time} · intensidad {a.intensity}
+                  </div>
+                  <div className="entry-sub">
+                    {[a.cause, a.action].filter(Boolean).join(' · ') || 'sin detalle'}
+                  </div>
+                </div>
+                <span className="tag">{a.resisted ? 'superado 💪' : 'cayó'}</span>
+                {confirmId === a.id ? (
+                  <span className="del-confirm">
+                    <button className="ghost danger" onClick={() => { setConfirmId(null); onDelete(a.id); }}>
+                      Borrar
+                    </button>
+                    <button className="ghost" onClick={() => setConfirmId(null)}>No</button>
+                  </span>
+                ) : (
+                  <button className="entry-del" aria-label="Borrar" onClick={() => setConfirmId(a.id)}>
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+
+      <p className="note">
+        Borrar un episodio también le quita el XP que te había dado.
+      </p>
+    </div>
+  );
+}
+
 export default function Progress() {
   const [profile, setProfile] = useState(null);
   const [summary, setSummary] = useState(null);
   const [weights, setWeights] = useState([]);
   const [energy, setEnergy] = useState(null);
   const [days, setDays] = useState([]);
+  const [anxiety, setAnxiety] = useState(null);
   const [form, setForm] = useState(null);
   const [newWeight, setNewWeight] = useState('');
   const [weightDate, setWeightDate] = useState(todayStr());
@@ -132,6 +226,7 @@ export default function Progress() {
     api.get('/api/weights').then(setWeights).catch(() => {});
     api.get('/api/energy?days=30').then(setEnergy).catch(() => {});
     api.get('/api/days?limit=60').then(setDays).catch(() => {});
+    api.get('/api/anxiety?days=90').then(setAnxiety).catch(() => {});
   }, []);
 
   useEffect(refresh, [refresh]);
@@ -310,6 +405,11 @@ export default function Progress() {
       ) : null}
 
       <DayHistory days={days} />
+
+      <AnxietyHistory
+        data={anxiety}
+        onDelete={(id) => api.del(`/api/anxiety/${id}`).then(refresh)}
+      />
 
       <form className="card" onSubmit={saveProfile}>
         <h2>Perfil</h2>
