@@ -231,6 +231,98 @@ app.delete('/api/logs/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Rutinas ----------
+// Una rutina agrupa ejercicios con su plan. No registra nada por sí misma: al
+// tildar cada ejercicio se crea un exercise_log normal, así el cálculo de
+// calorías, el XP y el mapa muscular siguen siendo los de siempre y no hay dos
+// caminos que puedan divergir.
+
+const exDeRutina = db.prepare(`
+  SELECT re.id, re.exercise_id, re.sets, re.reps, re.minutes, re.sort,
+         e.name, e.unit, e.met, e.type
+  FROM routine_exercises re
+  JOIN exercises e ON e.id = re.exercise_id
+  WHERE re.routine_id = ?
+  ORDER BY re.sort, re.id
+`);
+
+const conEjercicios = (r) => ({ ...r, exercises: exDeRutina.all(r.id) });
+
+// Reemplazo completo en vez de diff: la lista es corta y así no quedan filas
+// huérfanas ni hace falta que el cliente mande ids.
+const guardarEjercicios = db.transaction((routineId, lista) => {
+  db.prepare('DELETE FROM routine_exercises WHERE routine_id = ?').run(routineId);
+  const ins = db.prepare(
+    'INSERT INTO routine_exercises (routine_id, exercise_id, sets, reps, minutes, sort) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+  (Array.isArray(lista) ? lista : []).forEach((x, i) => {
+    const ex = db.prepare('SELECT id FROM exercises WHERE id = ?').get(x.exercise_id);
+    if (!ex) return; // ignora ejercicios que ya no existen
+    ins.run(routineId, x.exercise_id,
+            Number(x.sets) || null, Number(x.reps) || null, Number(x.minutes) || null, i);
+  });
+});
+
+// weekday: 0 = domingo … 6 = sábado (igual que Date.getDay(), para no tener que
+// convertir de un lado al otro). null = sin día fijo.
+const limpiarDia = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 && n <= 6 ? n : null;
+};
+
+app.get('/api/routines', (req, res) => {
+  const rows = db.prepare('SELECT * FROM routines WHERE active = 1 ORDER BY sort, id').all();
+  res.json(rows.map(conEjercicios));
+});
+
+// Lo que toca en una fecha: las rutinas de ese día de la semana, marcando qué
+// ejercicios ya registraste para no hacerlos dos veces.
+app.get('/api/routines/today', (req, res) => {
+  const date = req.query.date || todayStr();
+  const [y, m, d] = date.split('-').map(Number);
+  const weekday = new Date(y, m - 1, d).getDay();
+
+  const hechos = new Set(
+    db.prepare('SELECT exercise_id FROM exercise_logs WHERE date = ?').all(date).map((r) => r.exercise_id)
+  );
+  const rutinas = db.prepare(
+    'SELECT * FROM routines WHERE active = 1 AND weekday = ? ORDER BY sort, id'
+  ).all(weekday).map((r) => {
+    const exercises = exDeRutina.all(r.id).map((e) => ({ ...e, done: hechos.has(e.exercise_id) }));
+    return { ...r, exercises, pendientes: exercises.filter((e) => !e.done).length };
+  });
+
+  res.json({ date, weekday, routines: rutinas });
+});
+
+app.post('/api/routines', (req, res) => {
+  const { name, weekday, exercises } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Falta el nombre' });
+  const maxSort = db.prepare('SELECT COALESCE(MAX(sort), 0) AS m FROM routines').get().m;
+  const info = db.prepare('INSERT INTO routines (name, weekday, sort) VALUES (?, ?, ?)')
+    .run(name.trim(), limpiarDia(weekday), maxSort + 1);
+  guardarEjercicios(info.lastInsertRowid, exercises);
+  res.json(conEjercicios(db.prepare('SELECT * FROM routines WHERE id = ?').get(info.lastInsertRowid)));
+});
+
+app.put('/api/routines/:id', (req, res) => {
+  const r = db.prepare('SELECT * FROM routines WHERE id = ?').get(req.params.id);
+  if (!r) return res.status(404).json({ error: 'No existe' });
+  const { name, weekday, exercises } = req.body;
+  db.prepare('UPDATE routines SET name = ?, weekday = ? WHERE id = ?')
+    .run(name?.trim() || r.name, weekday !== undefined ? limpiarDia(weekday) : r.weekday, r.id);
+  if (exercises !== undefined) guardarEjercicios(r.id, exercises);
+  res.json(conEjercicios(db.prepare('SELECT * FROM routines WHERE id = ?').get(r.id)));
+});
+
+// Baja lógica, como el resto de la app: los registros que salieron de esta
+// rutina son exercise_logs comunes y no se tocan.
+app.delete('/api/routines/:id', (req, res) => {
+  db.prepare('UPDATE routines SET active = 0 WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
 // ---------- Comidas ----------
 app.get('/api/food', (req, res) => {
   const date = req.query.date || todayStr();

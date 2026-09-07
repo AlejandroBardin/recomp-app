@@ -93,6 +93,30 @@ CREATE TABLE IF NOT EXISTS anxiety_episodes (
   created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
+-- Una rutina es un conjunto de ejercicios con su plan (series/reps o minutos).
+-- weekday es opcional: con día fijo la app te dice "hoy te toca"; sin día es
+-- una lista que elegís cuando querés. Así sirve tanto para quien entrena con
+-- una semana armada como para quien va más suelto.
+CREATE TABLE IF NOT EXISTS routines (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  weekday INTEGER,
+  sort INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS routine_exercises (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  routine_id INTEGER NOT NULL,
+  exercise_id INTEGER NOT NULL,
+  sets INTEGER,
+  reps INTEGER,
+  minutes REAL,
+  sort INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_routine_ex ON routine_exercises (routine_id, sort);
+
 CREATE TABLE IF NOT EXISTS xp_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date TEXT NOT NULL,

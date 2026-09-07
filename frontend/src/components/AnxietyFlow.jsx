@@ -6,9 +6,9 @@ import { api } from '../api.js';
 // interrumpir el impulso, no analizarlo.
 
 const PHASES = [
-  { label: 'Inhalá', secs: 4, scale: 1.45 },
-  { label: 'Sostené', secs: 4, scale: 1.45 },
-  { label: 'Exhalá', secs: 6, scale: 1 }
+  { label: 'Inhalá', secs: 4, scale: 1.45, ease: 'cubic-bezier(.32,.62,.42,1)' },
+  { label: 'Sostené', secs: 4, scale: 1.45, ease: 'linear' },
+  { label: 'Exhalá', secs: 6, scale: 1, ease: 'cubic-bezier(.55,0,.5,.9)' }
 ];
 const CYCLES = 4;
 
@@ -21,21 +21,33 @@ const ACTIONS = [
   'Orar / meditar 2 minutos'
 ];
 
+// El anillo que rodea al círculo: un trazo que se vacía a lo largo de la fase.
+// Existe sobre todo por "Sostené", donde el círculo no cambia de tamaño y sin
+// esto la pantalla parecía colgada.
+const R = 74;
+const VUELTA = 2 * Math.PI * R;
+
 function Breathe({ onDone }) {
   const [phase, setPhase] = useState(0);
   const [cycle, setCycle] = useState(0);
+  // Se reinicia el anillo en cada fase: pasa de lleno a vacío en sus segundos.
+  const [corriendo, setCorriendo] = useState(false);
 
   useEffect(() => {
     if (cycle >= CYCLES) {
       onDone();
       return;
     }
+    // Un frame en el estado inicial antes de animar, o el navegador se saltea
+    // la transición y el anillo aparece ya vacío.
+    setCorriendo(false);
+    const arranque = requestAnimationFrame(() => requestAnimationFrame(() => setCorriendo(true)));
     const t = setTimeout(() => {
       const next = (phase + 1) % PHASES.length;
       setPhase(next);
       if (next === 0) setCycle((c) => c + 1);
     }, PHASES[phase].secs * 1000);
-    return () => clearTimeout(t);
+    return () => { clearTimeout(t); cancelAnimationFrame(arranque); };
   }, [phase, cycle, onDone]);
 
   const p = PHASES[phase];
@@ -43,9 +55,24 @@ function Breathe({ onDone }) {
     <>
       <h2 className="center">Respirá conmigo</h2>
       <div className="breath-wrap">
+        <svg className="breath-ring" viewBox="0 0 160 160" aria-hidden="true">
+          <circle cx="80" cy="80" r={R} className="breath-ring-bg" />
+          <circle
+            cx="80" cy="80" r={R}
+            className="breath-ring-fg"
+            strokeDasharray={VUELTA}
+            strokeDashoffset={corriendo ? VUELTA : 0}
+            style={{ transition: corriendo ? `stroke-dashoffset ${p.secs}s linear` : 'none' }}
+          />
+        </svg>
         <div
           className="breath-circle"
-          style={{ transform: `scale(${p.scale})`, transition: `transform ${p.secs}s ease-in-out` }}
+          style={{
+            transform: `scale(${p.scale})`,
+            // Inhalar y exhalar no se sienten iguales: la inhalación empuja al
+            // principio y la exhalación se suelta y se apaga.
+            transition: `transform ${p.secs}s ${p.ease}`
+          }}
         />
         <span className="breath-label">{p.label}</span>
       </div>

@@ -591,7 +591,7 @@ datalist { display: none; }
 }
 .breath-wrap {
   position: relative;
-  height: 190px;
+  height: 214px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -600,8 +600,40 @@ datalist { display: none; }
   width: 110px;
   height: 110px;
   border-radius: 50%;
-  background: radial-gradient(circle, var(--accent-soft), var(--accent));
-  opacity: 0.85;
+  /* Descentrado, para que el círculo tenga volumen y no parezca una mancha. */
+  background: radial-gradient(circle at 38% 32%, var(--accent-soft), var(--accent) 72%);
+  opacity: 0.9;
+  /* El halo crece con el círculo porque escala junto con él. */
+  box-shadow: 0 0 34px -4px var(--accent);
+}
+
+/* Anillo de progreso de la fase. Arranca arriba y gira en sentido horario. */
+.breath-ring {
+  position: absolute;
+  /* Con el círculo expandido (×1.45 = 160 px) el anillo necesita margen o el
+     halo se le monta encima y se lava la línea. */
+  width: 206px;
+  height: 206px;
+  transform: rotate(-90deg);
+}
+.breath-ring-bg {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 3;
+}
+.breath-ring-fg {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.75;
+}
+
+/* El movimiento acá es el punto del ejercicio, no decoración: si alguien pide
+   menos animación se queda el anillo, que igual marca el paso del tiempo, y
+   se quieta el círculo. */
+@media (prefers-reduced-motion: reduce) {
+  .breath-circle { transition: none !important; transform: scale(1.2) !important; }
 }
 .breath-label {
   position: absolute;
@@ -803,3 +835,26 @@ button.ghost.danger { color: #d8544a; border-color: #d8544a; }
   line-height: 1.4;
 }
 .warn strong { color: var(--ink); }
+
+/* ---------- Rutinas ---------- */
+.routine-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+/* Los pasitos de series/reps dentro de una fila de rutina: chicos, para que
+   la fila siga entrando en un teléfono. */
+input.mini {
+  width: 46px;
+  min-height: 32px;
+  padding: 4px 6px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.tag.ok { color: var(--accent); border-color: var(--accent); }
+.mission:disabled { cursor: default; }

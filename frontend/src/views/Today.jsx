@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
+import TodayRoutine from '../components/TodayRoutine.jsx';
 
 function StatTile({ label, value, hint }) {
   return (
@@ -253,8 +254,10 @@ export default function Today() {
   const [logs, setLogs] = useState([]);
   const [exercises, setExercises] = useState([]);
   const [character, setCharacter] = useState(null);
+  const [routine, setRoutine] = useState(null);
 
   const refresh = useCallback(() => {
+    api.get('/api/routines/today').then(setRoutine).catch(() => {});
     Promise.all([api.get('/api/summary'), api.get('/api/food'), api.get('/api/logs')])
       .then(([s, f, l]) => {
         setSummary(s);
@@ -337,6 +340,8 @@ export default function Today() {
       ) : null}
 
       <QuickFood onSaved={refresh} />
+      <TodayRoutine data={routine} weight={summary?.weight} onSaved={refresh} />
+
       <QuickExercise exercises={exercises} weight={summary?.weight} onSaved={refresh} />
 
       <div className="card">

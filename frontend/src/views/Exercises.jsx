@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, fmtDate } from '../api.js';
 import MuscleMap from '../components/MuscleMap.jsx';
+import RoutineEditor from '../components/RoutineEditor.jsx';
 
 const TYPES = ['tren superior', 'cardio bajo impacto', 'core', 'otro'];
 
@@ -105,10 +106,12 @@ export default function Exercises() {
   const [editing, setEditing] = useState(null); // null | 'new' | exercise
   const [muscles, setMuscles] = useState(null);
   const [dias, setDias] = useState(30);
+  const [routines, setRoutines] = useState([]);
 
   const refresh = useCallback(() => {
     api.get('/api/exercises').then(setExercises).catch(() => {});
     api.get('/api/logs/history?days=14').then(setHistory).catch(() => {});
+    api.get('/api/routines').then(setRoutines).catch(() => {});
   }, []);
 
   // El endpoint devuelve los 16 músculos dibujables con su etiqueta, así que
@@ -135,6 +138,8 @@ export default function Exercises() {
   return (
     <>
       <h1>Ejercicio</h1>
+
+      <RoutineEditor routines={routines} exercises={exercises} onChange={refresh} />
 
       <div className="card">
         <h2>Mis ejercicios</h2>
