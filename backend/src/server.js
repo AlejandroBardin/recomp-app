@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('./db');
 const { buscarAlimentos } = require('./openfoodfacts');
+const { ALIMENTOS_BASE } = require('./alimentos-base');
 const { MUSCLES, MUSCLE_KEYS, esMusculoValido } = require('./musculos');
 const {
   levelFromXp, rankFor, exerciseXp, weightXp, bodyTier,
@@ -99,6 +100,66 @@ function recalcularRegistrosSinPeso() {
 // ---------- Ejercicios ----------
 app.get('/api/exercises', (req, res) => {
   res.json(db.prepare('SELECT * FROM exercises WHERE active = 1 ORDER BY type, name').all());
+});
+
+// ---------- Catálogo de ejercicios ----------
+// 876 ejercicios de free-exercise-db con nombre en español, MET y músculos
+// (ver scripts/generar-catalogo-ejercicios.js). Es solo para autocompletar el
+// alta: nada de esto entra a la base hasta que Ale guarda el ejercicio, y lo
+// que guarda queda editable como cualquier otro.
+const CATALOGO = require('./catalogo-ejercicios.json');
+
+// Sin acentos y sin mayúsculas: "dominada" tiene que encontrar "Dominadas" y
+// "extension" tiene que encontrar "Extensión".
+const plano = (s) => (s || '')
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[̀-ͯ]/g, '')
+  .replace(/[^a-z0-9 ]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const CATALOGO_INDICE = CATALOGO.map((e) => ({ e, busca: `${plano(e.nombre)} ${plano(e.en)}` }));
+
+app.get('/api/exercises/catalog', (req, res) => {
+  const q = plano(req.query.q);
+  const limit = Math.min(Number(req.query.limit) || 12, 50);
+  if (q.length < 2) return res.json([]);
+
+  const palabras = q.split(' ');
+  // Los que empiezan con lo tipeado van primero: buscando "press" querés
+  // "Press militar" antes que "Extensión de tríceps en polea".
+  const encontrados = [];
+  for (const { e, busca } of CATALOGO_INDICE) {
+    if (!palabras.every((p) => busca.includes(p))) continue;
+    const nombre = plano(e.nombre);
+    const rango = nombre.startsWith(q) ? 0 : nombre.includes(q) ? 1 : 2;
+    // Los estiramientos van al final: buscando "sentadilla" querés la
+    // sentadilla con barra, no el "Sit Squat" de la sección de movilidad.
+    const prioridad = e.categoria === 'stretching' ? 1 : 0;
+    encontrados.push({ e, rango, prioridad, largo: e.nombre.length });
+  }
+  encontrados.sort((a, b) => a.rango - b.rango || a.prioridad - b.prioridad || a.largo - b.largo);
+
+  // Marcar los que ya están en la lista de ejercicios, para no duplicarlos
+  // sin darse cuenta.
+  const mios = new Set(
+    db.prepare('SELECT name FROM exercises WHERE active = 1').all().map((r) => plano(r.name))
+  );
+
+  res.json(encontrados.slice(0, limit).map(({ e }) => ({
+    nombre: e.nombre,
+    en: e.en,
+    tipo: e.tipo,
+    met: e.met,
+    unidad: e.unidad,
+    primary: e.primary,
+    secondary: e.secondary,
+    equipo: e.equipo,
+    categoria: e.categoria,
+    nivel: e.nivel,
+    ya: mios.has(plano(e.nombre))
+  })));
 });
 
 // Los músculos llegan como arrays de claves de la taxonomía; se descarta
@@ -329,24 +390,72 @@ app.get('/api/food', (req, res) => {
   res.json(db.prepare('SELECT * FROM food_entries WHERE date = ? ORDER BY time DESC, id DESC').all(date));
 });
 
+// Unidades de carga. 'g' y 'ml' se cuentan por 100 (como viene la etiqueta);
+// 'unidad' y 'porcion', por pieza. `porcion` no lleva acento en la base para
+// no depender de la codificación de la columna.
+const UNIDADES = ['g', 'ml', 'unidad', 'porcion'];
+const porCien = (u) => u === 'g' || u === 'ml';
+
+const numeroOpcional = (v) => {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 10) / 10 : null;
+};
+
 app.post('/api/food', (req, res) => {
-  const { name, calories, impulsive, date, time } = req.body;
+  const { name, calories, impulsive, date, time, qty, unit, base } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Falta el nombre' });
   const kcal = Number(calories);
   if (!Number.isFinite(kcal) || kcal < 0) return res.status(400).json({ error: 'Calorías inválidas' });
-  const info = db.prepare(
-    'INSERT INTO food_entries (date, time, name, calories, impulsive) VALUES (?, ?, ?, ?, ?)'
-  ).run(date || todayStr(), time || nowTime(), name.trim(), kcal, impulsive ? 1 : 0);
 
-  // actualizar alimentos frecuentes (autocompletado)
+  const unidad = UNIDADES.includes(unit) ? unit : null;
+  const cantidad = numeroOpcional(qty);
+  // Gramos totales solo cuando la unidad los da directo: de "2 porciones" no
+  // se puede inferir un peso, y un número inventado ensucia el histórico.
+  const gramos = unidad === 'g' && cantidad != null ? cantidad : null;
+
+  const macros = {
+    protein: numeroOpcional(req.body.protein),
+    fat: numeroOpcional(req.body.fat),
+    carbs: numeroOpcional(req.body.carbs),
+    fiber: numeroOpcional(req.body.fiber)
+  };
+
+  const info = db.prepare(`
+    INSERT INTO food_entries (date, time, name, calories, impulsive, qty, unit, grams, protein, fat, carbs, fiber)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(date || todayStr(), time || nowTime(), name.trim(), Math.round(kcal), impulsive ? 1 : 0,
+         cantidad, unidad, gramos, macros.protein, macros.fat, macros.carbs, macros.fiber);
+
+  // Alimentos frecuentes: además de las kcal de la última carga se guarda la
+  // referencia nutricional, así la próxima vez alcanza con poner la cantidad.
+  // Si el alta no trae referencia, la que ya estaba guardada no se pisa.
+  const BASES = ['100g', 'unidad', 'porcion'];
+  const ref = base && BASES.includes(base.unit) && numeroOpcional(base.kcal) != null ? base : null;
+  const baseUnit = ref ? ref.unit : null;
+
   db.prepare(`
-    INSERT INTO frequent_foods (name, calories, times_used, last_used)
-    VALUES (?, ?, 1, datetime('now','localtime'))
+    INSERT INTO frequent_foods (name, calories, times_used, last_used,
+                                base_unit, base_kcal, base_protein, base_fat, base_carbs, base_fiber, base_label)
+    VALUES (?, ?, 1, datetime('now','localtime'), ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(name) DO UPDATE SET
       calories = excluded.calories,
       times_used = times_used + 1,
-      last_used = excluded.last_used
-  `).run(name.trim(), kcal);
+      last_used = excluded.last_used,
+      base_unit = COALESCE(excluded.base_unit, base_unit),
+      base_kcal = COALESCE(excluded.base_kcal, base_kcal),
+      base_protein = COALESCE(excluded.base_protein, base_protein),
+      base_fat = COALESCE(excluded.base_fat, base_fat),
+      base_carbs = COALESCE(excluded.base_carbs, base_carbs),
+      base_fiber = COALESCE(excluded.base_fiber, base_fiber),
+      base_label = COALESCE(excluded.base_label, base_label)
+  `).run(name.trim(), Math.round(kcal), baseUnit,
+         baseUnit ? numeroOpcional(ref.kcal) : null,
+         baseUnit ? numeroOpcional(ref.protein) : null,
+         baseUnit ? numeroOpcional(ref.fat) : null,
+         baseUnit ? numeroOpcional(ref.carbs) : null,
+         baseUnit ? numeroOpcional(ref.fiber) : null,
+         baseUnit && typeof ref.label === 'string' ? ref.label.slice(0, 40) : null);
 
   res.json(db.prepare('SELECT * FROM food_entries WHERE id = ?').get(info.lastInsertRowid));
 });
@@ -370,20 +479,51 @@ const normalize = (s) => s.normalize('NFD').replace(new RegExp('[\\u0300-\\u036f
 app.get('/api/foods/suggest', async (req, res) => {
   const texto = (req.query.q || '').trim();
   const q = normalize(texto);
-  const rows = db.prepare('SELECT name, calories FROM frequent_foods ORDER BY times_used DESC, last_used DESC').all();
+  const rows = db.prepare(`
+    SELECT name, calories, base_unit, base_kcal, base_protein, base_fat, base_carbs, base_fiber, base_label
+    FROM frequent_foods ORDER BY times_used DESC, last_used DESC
+  `).all();
   const matches = q ? rows.filter((r) => normalize(r.name).includes(q)) : rows;
 
   // Los tuyos primero y siempre: son los que de verdad comés, ya tienen las
   // calorías de la porción que solés servirte, y salen de la base local
-  // aunque Open Food Facts esté caído.
-  const locales = matches.slice(0, 6)
-    .map((r) => ({ source: 'local', name: r.name, calories: r.calories }));
+  // aunque Open Food Facts esté caído. Los que ya cargaste con referencia
+  // (por 100 g o por unidad) la traen puesta y solo hay que poner cuánto.
+  const locales = matches.slice(0, 6).map((r) => ({
+    source: 'local',
+    name: r.name,
+    calories: r.calories,
+    base: r.base_unit
+      ? {
+        unit: r.base_unit,
+        kcal: r.base_kcal,
+        protein: r.base_protein,
+        fat: r.base_fat,
+        carbs: r.base_carbs,
+        fiber: r.base_fiber,
+        label: r.base_label
+      }
+      : null
+  }));
 
   const yaEstan = new Set(locales.map((l) => normalize(l.name)));
+
+  // Alimentos comunes con macros: un huevo, un tomate, una cucharada de
+  // aceite. Van después de los tuyos y antes de Open Food Facts, que sirve
+  // para productos envasados pero no tiene comida suelta.
+  const base = q
+    ? ALIMENTOS_BASE
+      .filter((a) => normalize(a.name).includes(q) && !yaEstan.has(normalize(a.name)))
+      .sort((a, b) => normalize(a.name).indexOf(q) - normalize(b.name).indexOf(q))
+      .slice(0, 6)
+      .map((a) => ({ source: 'base', ...a }))
+    : [];
+  for (const a of base) yaEstan.add(normalize(a.name));
+
   const externos = (await buscarAlimentos(texto))
     .filter((e) => !yaEstan.has(normalize(e.name)));
 
-  res.json([...locales, ...externos.slice(0, 6)]);
+  res.json([...locales, ...base, ...externos.slice(0, 6)]);
 });
 
 // Patrones: comidas impulsivas agrupadas por hora del día
@@ -472,7 +612,38 @@ function computeTargets(profile, weight) {
     weeklyLossKg: Math.round(weeklyLossKg * 100) / 100,
     dailyDeficit: Math.round(dailyDeficit),
     targetCalories: Math.round(targetCalories),
-    belowBmr: targetCalories < bmr
+    belowBmr: targetCalories < bmr,
+    // En déficit la proteína es lo que decide si lo que baja es grasa o
+    // músculo. 1.8 g/kg es el piso habitual para un recorte agresivo; el
+    // rango de trabajo va hasta ~2.2.
+    proteinTarget: Math.round(weight * 1.8),
+    proteinRange: [Math.round(weight * 1.6), Math.round(weight * 2.2)]
+  };
+}
+
+// Macros del día. `cubierto` es la parte de las calorías que tiene macros
+// cargados: sin eso, un total de "40 g de proteína" no se distingue de "comí
+// poca proteína" cuando en realidad es "cargué poco". Es un piso, no un dato.
+function macrosDelDia(date) {
+  const r = db.prepare(`
+    SELECT
+      COALESCE(SUM(protein), 0) AS protein,
+      COALESCE(SUM(fat), 0)     AS fat,
+      COALESCE(SUM(carbs), 0)   AS carbs,
+      COALESCE(SUM(fiber), 0)   AS fiber,
+      COALESCE(SUM(CASE WHEN protein IS NOT NULL OR fat IS NOT NULL OR carbs IS NOT NULL
+                        THEN calories ELSE 0 END), 0) AS kcalConMacros,
+      COALESCE(SUM(calories), 0) AS kcal
+    FROM food_entries WHERE date = ?
+  `).get(date);
+  const redondear = (n) => Math.round(n * 10) / 10;
+  return {
+    protein: redondear(r.protein),
+    fat: redondear(r.fat),
+    carbs: redondear(r.carbs),
+    fiber: redondear(r.fiber),
+    kcalConMacros: Math.round(r.kcalConMacros),
+    cubierto: r.kcal > 0 ? Math.round((r.kcalConMacros / r.kcal) * 100) : null
   };
 }
 
@@ -484,6 +655,7 @@ app.get('/api/summary', (req, res) => {
   const profile = db.prepare('SELECT * FROM profile WHERE id = 1').get() || null;
   const weight = latestWeight();
   const targets = computeTargets(profile, weight);
+  const macros = macrosDelDia(date);
   res.json({
     date,
     consumed: Math.round(consumed),
@@ -491,7 +663,18 @@ app.get('/api/summary', (req, res) => {
     net: Math.round(consumed - burned),
     weight,
     profile,
-    targets
+    targets,
+    macros,
+    // Gramos por kg de peso: es la forma en que se leen los macros en
+    // recomposición, no en gramos absolutos.
+    perKg: weight
+      ? {
+        kcal: Math.round((consumed / weight) * 10) / 10,
+        protein: Math.round((macros.protein / weight) * 100) / 100,
+        fat: Math.round((macros.fat / weight) * 100) / 100,
+        carbs: Math.round((macros.carbs / weight) * 100) / 100
+      }
+      : null
   });
 });
 

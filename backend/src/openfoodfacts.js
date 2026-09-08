@@ -33,10 +33,17 @@ const usable = (p) => {
 
 const esArgentino = (p) => (p.countries_tags || []).includes('en:argentina');
 
+// Los macros vienen en el mismo objeto `nutriments` que las calorías, así que
+// no cuesta nada traerlos. Los que el producto no declara quedan en null: es
+// distinto de un cero, y sumar ceros inventados daría un total de proteína
+// más bajo que el real.
+const num = (v) => (Number.isFinite(v) && v >= 0 ? Math.round(v * 10) / 10 : null);
+
 /**
  * Busca `q` en Open Food Facts. Devuelve como mucho `limit` sugerencias
- * `{ source: 'off', name, brand, kcalPer100g }`, con los productos argentinos
- * primero. Ante cualquier error devuelve [].
+ * `{ source: 'off', name, brand, kcalPer100g, protein, fat, carbs, fiber, servingG }`
+ * (los macros, por 100 g), con los productos argentinos primero. Ante
+ * cualquier error devuelve [].
  */
 async function buscarAlimentos(q, limit = 6) {
   const clave = q.trim().toLowerCase();
@@ -46,7 +53,7 @@ async function buscarAlimentos(q, limit = 6) {
   if (hit && Date.now() - hit.t < CACHE_TTL_MS) return hit.items.slice(0, limit);
 
   const url = `${BASE}?q=${encodeURIComponent(clave)}&page_size=25`
-    + '&fields=product_name,brands,nutriments,countries_tags';
+    + '&fields=product_name,brands,nutriments,countries_tags,serving_quantity,product_quantity';
 
   let items = [];
   try {
@@ -72,11 +79,19 @@ async function buscarAlimentos(q, limit = 6) {
       const k = name.toLowerCase();
       if (vistos.has(k)) continue;
       vistos.add(k);
+      const n = p.nutriments;
       items.push({
         source: 'off',
         name,
         brand: Array.isArray(p.brands) ? p.brands[0] || null : p.brands || null,
-        kcalPer100g: Math.round(p.nutriments['energy-kcal_100g'])
+        kcalPer100g: Math.round(n['energy-kcal_100g']),
+        protein: num(n.proteins_100g),
+        fat: num(n.fat_100g),
+        carbs: num(n.carbohydrates_100g),
+        fiber: num(n.fiber_100g),
+        // Porción declarada en gramos, para ofrecerla en vez de los 100 g
+        // por defecto (una lata de gaseosa son 330 ml, no 100).
+        servingG: num(p.serving_quantity)
       });
     }
   } catch {

@@ -38,6 +38,23 @@ first, en español rioplatense (vos/tuteo), tono neutro y sin culpa.
   `4.png`→body-03...). El script borra solo textos/artefactos sueltos.
 - Los PNGs crudos de la raíz **no se versionan** (solo los procesados).
 
+## Comida y catálogo de ejercicios
+
+- `food_entries` guarda además de kcal: `qty`, `unit` ('g'|'ml'|'unidad'|
+  'porcion'), `grams`, `protein`, `fat`, `carbs`, `fiber` — los macros ya
+  resueltos, en gramos, y `null` cuando no se declararon (nunca 0).
+- `frequent_foods` guarda la **referencia** del alimento (`base_unit` '100g' |
+  'unidad' | 'porcion', más `base_kcal` y los macros de esa base). Se deriva
+  dividiendo lo que se cargó por la cantidad, y `COALESCE` evita que un alta
+  sin referencia pise la que ya había.
+- El alta es un solo componente, `components/FoodForm.jsx`, usado por Hoy (con
+  la fecha de hoy) y por Comida (con la fecha que se está mirando).
+- `backend/src/catalogo-ejercicios.json`: 876 ejercicios de free-exercise-db
+  con nombre en español, MET (Compendium), unidad y músculos. Lo genera
+  `scripts/generar-catalogo-ejercicios.js` traduciendo por reglas; lo que no
+  reconoce queda en inglés y se busca igual porque el nombre original viaja en
+  el catálogo. Se sirve por `GET /api/exercises/catalog?q=`.
+
 ## Estado actual (última sesión: 2026-07-13)
 
 **Hecho y en producción (commits hasta `ee025b5`):**

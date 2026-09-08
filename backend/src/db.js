@@ -166,6 +166,37 @@ const agregarColumna = (tabla, columna, definicion) => {
 agregarColumna('exercises', 'primary_muscles', 'TEXT');
 agregarColumna('exercises', 'secondary_muscles', 'TEXT');
 
+// Porción y macros de cada comida. Hasta ahora un registro era nombre + kcal,
+// y con eso no se puede decir nada sobre la calidad del déficit: 1730 kcal con
+// 150 g de proteína y 1730 kcal sin proteína adelgazan distinto.
+//
+// `qty` + `unit` es lo que cargaste ("200 g", "3 unidades"); `grams` es el peso
+// total cuando se puede saber, para poder recalcular después. Los macros se
+// guardan ya resueltos, en gramos: la referencia por 100 g vive en
+// frequent_foods, no acá, así un cambio de referencia no reescribe el pasado.
+agregarColumna('food_entries', 'qty', 'REAL');
+agregarColumna('food_entries', 'unit', 'TEXT');
+agregarColumna('food_entries', 'grams', 'REAL');
+agregarColumna('food_entries', 'protein', 'REAL');
+agregarColumna('food_entries', 'fat', 'REAL');
+agregarColumna('food_entries', 'carbs', 'REAL');
+agregarColumna('food_entries', 'fiber', 'REAL');
+
+// La referencia nutricional del alimento, para que la próxima vez alcance con
+// poner la cantidad. `base_unit` dice a qué se refieren los valores:
+// '100g' (por 100 g o 100 ml), 'unidad' (por unidad) o 'porcion' (la porción
+// entera, sin cantidad variable).
+agregarColumna('frequent_foods', 'base_unit', 'TEXT');
+agregarColumna('frequent_foods', 'base_kcal', 'REAL');
+agregarColumna('frequent_foods', 'base_protein', 'REAL');
+agregarColumna('frequent_foods', 'base_fat', 'REAL');
+agregarColumna('frequent_foods', 'base_carbs', 'REAL');
+agregarColumna('frequent_foods', 'base_fiber', 'REAL');
+// Cómo se llama la unidad cuando `base_unit` es 'unidad': huevo, cucharada,
+// lata, feta. Solo para mostrar: "78 kcal por huevo" se lee mejor que
+// "78 kcal por unidad".
+agregarColumna('frequent_foods', 'base_label', 'TEXT');
+
 // Músculos de los ejercicios base, tomados de free-exercise-db. Solo completa
 // los que todavía no los tienen, así corre igual sobre una base ya cargada.
 // Un ejercicio propio que no esté en el mapa queda sin músculos hasta que se

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, fmtDate } from '../api.js';
 import MuscleMap from '../components/MuscleMap.jsx';
 import RoutineEditor from '../components/RoutineEditor.jsx';
 
-const TYPES = ['tren superior', 'cardio bajo impacto', 'core', 'otro'];
+const TYPES = ['tren superior', 'tren inferior', 'core', 'cardio bajo impacto', 'movilidad', 'otro'];
 
 const EMPTY = {
   name: '', type: 'tren superior', met: '4', unit: 'series',
@@ -18,7 +18,46 @@ const parseMusculos = (v) => {
 
 function ExerciseForm({ initial, catalogo, onDone, onCancel }) {
   const [form, setForm] = useState(initial);
-  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  // Sugerencias del catálogo de free-exercise-db: escribís "dominada" y el
+  // formulario se completa solo (tipo, MET, unidad y músculos). Solo al dar
+  // de alta: sobre uno que ya existe, pisarle todo sería peor que ayudarlo.
+  const [sugerencias, setSugerencias] = useState([]);
+  const [abierto, setAbierto] = useState(false);
+  const buscable = !form.id;
+  // El primer render no tiene que buscar: `initial.name` viene del ejercicio
+  // que se está editando, no de algo que se tipeó.
+  const tocado = useRef(false);
+
+  const set = (k) => (e) => {
+    if (k === 'name') { tocado.current = true; setAbierto(true); }
+    setForm({ ...form, [k]: e.target.value });
+  };
+
+  useEffect(() => {
+    if (!buscable || !tocado.current) return;
+    const q = form.name.trim();
+    if (q.length < 2) { setSugerencias([]); return; }
+    const t = setTimeout(() => {
+      api.get(`/api/exercises/catalog?q=${encodeURIComponent(q)}`)
+        .then(setSugerencias)
+        .catch(() => {});
+    }, 200);
+    return () => clearTimeout(t);
+  }, [form.name, buscable]);
+
+  const elegir = (s) => {
+    setAbierto(false);
+    setSugerencias([]);
+    setForm({
+      ...form,
+      name: s.nombre,
+      type: TYPES.includes(s.tipo) ? s.tipo : 'otro',
+      met: String(s.met),
+      unit: s.unidad,
+      primary_muscles: s.primary || [],
+      secondary_muscles: s.secondary || []
+    });
+  };
 
   // Un músculo está en principal o en secundario, nunca en los dos: marcarlo
   // en uno lo saca del otro.
@@ -47,8 +86,28 @@ function ExerciseForm({ initial, catalogo, onDone, onCancel }) {
     <form className="inline-form" style={{ flexWrap: 'wrap' }} onSubmit={save}>
       <label style={{ flexBasis: '100%' }}>
         Nombre
-        <input value={form.name} onChange={set('name')} placeholder="ej. remo con banda" />
+        <input
+          value={form.name}
+          onChange={set('name')}
+          onFocus={() => setAbierto(true)}
+          placeholder={buscable ? 'ej. dominada, press de banca, sentadilla' : 'ej. remo con banda'}
+          autoComplete="off"
+        />
       </label>
+      {buscable && abierto && sugerencias.length > 0 && (
+        <div className="suggest-list" style={{ flexBasis: '100%' }}>
+          {sugerencias.map((s) => (
+            <button type="button" key={s.en} className="suggest" onClick={() => elegir(s)}>
+              <span className="suggest-name">
+                {s.nombre}
+                {s.ya ? <span className="tag" style={{ marginLeft: 6 }}>ya lo tenés</span> : null}
+                <span className="suggest-en"> · {s.en}</span>
+              </span>
+              <span className="suggest-meta">MET {s.met} · {s.unidad}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <label>
         Tipo
         <select value={form.type} onChange={set('type')}>

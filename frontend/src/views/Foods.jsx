@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, todayStr, fmtDate } from '../api.js';
+import FoodForm from '../components/FoodForm.jsx';
 
 export default function Foods() {
   const [date, setDate] = useState(todayStr());
   const [entries, setEntries] = useState([]);
   const [patterns, setPatterns] = useState(null);
+  const [summary, setSummary] = useState(null);
 
   const refresh = useCallback(() => {
     api.get(`/api/food?date=${date}`).then(setEntries).catch(() => {});
+    api.get(`/api/summary?date=${date}`).then(setSummary).catch(() => {});
     api.get('/api/food/patterns').then(setPatterns).catch(() => {});
   }, [date]);
 
   useEffect(refresh, [refresh]);
 
   const total = entries.reduce((sum, e) => sum + e.calories, 0);
+  const m = summary?.macros;
   const maxCount = patterns?.byHour?.length ? Math.max(...patterns.byHour.map((h) => h.count)) : 0;
 
   const toggleImpulsive = async (entry) => {
@@ -37,6 +41,13 @@ export default function Foods() {
             <span className="tile-hint">kcal</span>
           </div>
         </div>
+        {m && total > 0 ? (
+          <p className="muted">
+            {Math.round(m.protein)} g de proteína · {Math.round(m.carbs)} g de carbos ·{' '}
+            {Math.round(m.fat)} g de grasa · {Math.round(m.fiber)} g de fibra
+            {m.cubierto != null && m.cubierto < 100 ? ` (${m.cubierto}% de las kcal con macros)` : ''}
+          </p>
+        ) : null}
         {entries.length === 0 ? (
           <p className="muted">Sin registros para esta fecha.</p>
         ) : (
@@ -45,7 +56,11 @@ export default function Foods() {
               <div className="entry" key={f.id}>
                 <div className="entry-main">
                   <div className="entry-name">{f.name}</div>
-                  <div className="entry-sub">{f.time}</div>
+                  <div className="entry-sub">
+                    {f.time}
+                    {f.qty ? ` · ${f.qty} ${f.unit === 'porcion' ? 'porción' : f.unit}` : ''}
+                    {f.protein != null ? ` · ${f.protein} g prot.` : ''}
+                  </div>
                 </div>
                 <button
                   className={`pill-toggle ${f.impulsive ? 'on' : ''}`}
@@ -67,6 +82,8 @@ export default function Foods() {
           </div>
         )}
       </div>
+
+      <FoodForm date={date} onSaved={refresh} />
 
       <div className="card">
         <h2>Patrones — comidas fuera de hambre real</h2>

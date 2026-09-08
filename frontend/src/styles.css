@@ -775,6 +775,22 @@ button.ghost.danger { color: #d8544a; border-color: #d8544a; }
   font-variant-numeric: tabular-nums;
 }
 
+.suggest-en { color: var(--muted); font-size: 0.76rem; }
+
+/* Cuatro macros en una fila: en un teléfono angosto entran igual porque el
+   número es corto (una cifra de gramos) y la etiqueta va arriba. */
+.macro-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.macro-grid .tile { padding: 10px 6px; }
+.macro-grid .tile-value { font-size: 1.25rem; }
+.macro-grid .tile-hint { font-size: 0.62rem; }
+
+/* Los cuatro campos de macros del alta, cuando se cargan a mano. */
+.macro-row label { flex: 1 1 64px; }
+
 .portion-hint { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* ---------- Mapa muscular ---------- */

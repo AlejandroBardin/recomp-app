@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../api.js';
+import { api, todayStr } from '../api.js';
+import FoodForm from '../components/FoodForm.jsx';
 import TodayRoutine from '../components/TodayRoutine.jsx';
 
 function StatTile({ label, value, hint }) {
@@ -9,162 +10,6 @@ function StatTile({ label, value, hint }) {
       <span className="tile-value">{value}</span>
       {hint ? <span className="tile-hint">{hint}</span> : null}
     </div>
-  );
-}
-
-function QuickFood({ onSaved }) {
-  const [name, setName] = useState('');
-  const [kcal, setKcal] = useState('');
-  // Un resultado de Open Food Facts trae kcal por 100 g, no de la porción:
-  // mientras haya uno elegido, se pide gramos y las calorías se calculan.
-  const [per100, setPer100] = useState(null);
-  const [grams, setGrams] = useState('');
-  const [impulsive, setImpulsive] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      api.get(`/api/foods/suggest?q=${encodeURIComponent(name)}`)
-        .then(setSuggestions)
-        .catch(() => {});
-    }, 250);
-    return () => clearTimeout(t);
-  }, [name]);
-
-  const calculado = per100 != null
-    ? Math.round((per100 * (Number(grams) || 0)) / 100)
-    : Number(kcal);
-
-  const handleName = (value) => {
-    setName(value);
-    setOpen(true);
-    // Si reescribe el nombre a mano, el producto elegido deja de aplicar.
-    if (per100 != null) { setPer100(null); setGrams(''); }
-  };
-
-  const elegir = (s) => {
-    setOpen(false);
-    if (s.source === 'off') {
-      // La marca va en el nombre porque frequent_foods tiene UNIQUE(name):
-      // dos "Yogur" de marcas distintas se pisarían las calorías entre sí.
-      setName(s.brand ? `${s.name} (${s.brand})` : s.name);
-      setPer100(s.kcalPer100g);
-      setGrams('100');
-      setKcal('');
-    } else {
-      setName(s.name);
-      setPer100(null);
-      setGrams('');
-      setKcal(String(Math.round(s.calories)));
-    }
-  };
-
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!name.trim() || !(calculado > 0)) return;
-    setSaving(true);
-    try {
-      await api.post('/api/food', { name, calories: calculado, impulsive });
-      setName('');
-      setKcal('');
-      setPer100(null);
-      setGrams('');
-      setImpulsive(false);
-      onSaved();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <form className="card" onSubmit={submit}>
-      <h2>Agregar comida</h2>
-      <div className="row">
-        <label>
-          Qué comiste
-          <input
-            value={name}
-            onChange={(e) => handleName(e.target.value)}
-            onFocus={() => setOpen(true)}
-            placeholder="ej. café con leche"
-            autoComplete="off"
-          />
-        </label>
-        {per100 != null ? (
-          <label style={{ flex: '0 0 84px' }}>
-            gramos
-            <input
-              type="number"
-              inputMode="numeric"
-              min="1"
-              value={grams}
-              onChange={(e) => setGrams(e.target.value)}
-              placeholder="100"
-            />
-          </label>
-        ) : (
-          <label style={{ flex: '0 0 96px' }}>
-            kcal
-            <input
-              type="number"
-              inputMode="numeric"
-              min="0"
-              value={kcal}
-              onChange={(e) => setKcal(e.target.value)}
-              placeholder="0"
-            />
-          </label>
-        )}
-      </div>
-
-      {per100 != null && (
-        <p className="muted portion-hint">
-          {per100} kcal por 100 g → <strong>{calculado} kcal</strong>
-          <button
-            type="button"
-            className="ghost small"
-            onClick={() => { setPer100(null); setGrams(''); setKcal(String(calculado || '')); }}
-          >
-            poner kcal a mano
-          </button>
-        </p>
-      )}
-
-      {open && suggestions.length > 0 && (
-        <div className="suggest-list">
-          {suggestions.map((s) => (
-            <button
-              type="button"
-              key={`${s.source}-${s.name}`}
-              className="suggest"
-              onClick={() => elegir(s)}
-            >
-              <span className="suggest-name">{s.name}</span>
-              <span className="suggest-meta">
-                {s.source === 'off'
-                  ? `${s.brand ? s.brand + ' · ' : ''}${s.kcalPer100g} kcal/100 g`
-                  : `${Math.round(s.calories)} kcal`}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="row">
-        <button
-          type="button"
-          className={`pill-toggle shrink ${impulsive ? 'on' : ''}`}
-          onClick={() => setImpulsive(!impulsive)}
-        >
-          {impulsive ? '✓ ' : ''}fuera de hambre real
-        </button>
-        <button className="primary shrink" disabled={saving || !name.trim() || !(calculado > 0)}>
-          Guardar
-        </button>
-      </div>
-    </form>
   );
 }
 
@@ -279,6 +124,8 @@ export default function Today() {
   const todayDeficit = t ? t.tdee + summary.burned - summary.consumed : null;
 
   const calPct = t && t.targetCalories > 0 ? Math.round((summary.net / t.targetCalories) * 100) : null;
+  const m = summary?.macros;
+  const perKg = summary?.perKg;
 
   return (
     <>
@@ -331,6 +178,41 @@ export default function Today() {
         />
       </div>
 
+      {m && summary.consumed > 0 ? (
+        <div className="card">
+          <div className="card-head">
+            <h2>Macros de hoy</h2>
+            {m.cubierto != null && m.cubierto < 100 ? (
+              <span className="tag">{m.cubierto}% de las kcal con macros</span>
+            ) : null}
+          </div>
+          <div className="macro-grid">
+            {[
+              ['Proteína', m.protein, t?.proteinTarget, 'g'],
+              ['Carbos', m.carbs, null, 'g'],
+              ['Grasas', m.fat, null, 'g'],
+              ['Fibra', m.fiber, 25, 'g']
+            ].map(([etiqueta, valor, objetivo, u]) => (
+              <div className="tile" key={etiqueta}>
+                <span className="tile-label">{etiqueta}</span>
+                <span className="tile-value">{Math.round(valor)}</span>
+                <span className="tile-hint">
+                  {objetivo ? `${u} · objetivo ${objetivo}` : u}
+                  {perKg && etiqueta === 'Proteína' ? ` · ${perKg.protein} g/kg` : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+          {m.cubierto != null && m.cubierto < 100 ? (
+            <p className="muted">
+              Es un piso, no el total: {100 - m.cubierto}% de lo que comiste hoy se cargó sin
+              macros. Elegí el alimento del autocompletado o poné los gramos a mano para que
+              cuente.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {todayDeficit != null && summary.consumed > 0 ? (
         <p className="note">
           {todayDeficit > 0
@@ -339,7 +221,7 @@ export default function Today() {
         </p>
       ) : null}
 
-      <QuickFood onSaved={refresh} />
+      <FoodForm date={todayStr()} onSaved={refresh} />
       <TodayRoutine data={routine} weight={summary?.weight} onSaved={refresh} />
 
       <QuickExercise exercises={exercises} weight={summary?.weight} onSaved={refresh} />
@@ -354,7 +236,11 @@ export default function Today() {
               <div className="entry" key={f.id}>
                 <div className="entry-main">
                   <div className="entry-name">{f.name}</div>
-                  <div className="entry-sub">{f.time}</div>
+                  <div className="entry-sub">
+                    {f.time}
+                    {f.qty ? ` · ${f.qty} ${f.unit === 'porcion' ? 'porción' : f.unit}` : ''}
+                    {f.protein != null ? ` · ${f.protein} g prot.` : ''}
+                  </div>
                 </div>
                 {f.impulsive ? <span className="tag">fuera de hambre</span> : null}
                 <span className="entry-kcal">{Math.round(f.calories)} kcal</span>
