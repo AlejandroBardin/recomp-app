@@ -5,6 +5,7 @@ const fs = require('fs');
 const db = require('./db');
 const { buscarAlimentos } = require('./openfoodfacts');
 const { ALIMENTOS_BASE } = require('./alimentos-base');
+const { hoy, ahora, ahoraCompleto, restarDias } = require('./fecha');
 const { MUSCLES, MUSCLE_KEYS, esMusculoValido } = require('./musculos');
 const {
   levelFromXp, rankFor, exerciseXp, weightXp, bodyTier,
@@ -17,15 +18,8 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
 
-const todayStr = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
-const nowTime = () => {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-};
+const todayStr = hoy;
+const nowTime = ahora;
 
 function latestWeight() {
   const row = db.prepare('SELECT weight FROM weight_entries ORDER BY date DESC LIMIT 1').get();
@@ -211,8 +205,8 @@ app.get('/api/muscles', (req, res) => {
     SELECT l.sets, l.minutes, e.primary_muscles, e.secondary_muscles
     FROM exercise_logs l
     LEFT JOIN exercises e ON e.id = l.exercise_id
-    WHERE l.date >= date('now','localtime',?)
-  `).all(`-${days} days`);
+    WHERE l.date >= ?
+  `).all(restarDias(days));
 
   const volumen = Object.fromEntries(MUSCLE_KEYS.map((k) => [k, 0]));
   let sinAsignar = 0;
@@ -261,8 +255,8 @@ app.get('/api/logs', (req, res) => {
 app.get('/api/logs/history', (req, res) => {
   const days = Math.min(Number(req.query.days) || 14, 90);
   const rows = db.prepare(
-    `SELECT * FROM exercise_logs WHERE date >= date('now', 'localtime', ?) ORDER BY date DESC, created_at DESC`
-  ).all(`-${days} days`);
+    `SELECT * FROM exercise_logs WHERE date >= ? ORDER BY date DESC, created_at DESC`
+  ).all(restarDias(days));
   res.json(rows);
 });
 
@@ -437,7 +431,7 @@ app.post('/api/food', (req, res) => {
   db.prepare(`
     INSERT INTO frequent_foods (name, calories, times_used, last_used,
                                 base_unit, base_kcal, base_protein, base_fat, base_carbs, base_fiber, base_label)
-    VALUES (?, ?, 1, datetime('now','localtime'), ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(name) DO UPDATE SET
       calories = excluded.calories,
       times_used = times_used + 1,
@@ -449,7 +443,7 @@ app.post('/api/food', (req, res) => {
       base_carbs = COALESCE(excluded.base_carbs, base_carbs),
       base_fiber = COALESCE(excluded.base_fiber, base_fiber),
       base_label = COALESCE(excluded.base_label, base_label)
-  `).run(name.trim(), Math.round(kcal), baseUnit,
+  `).run(name.trim(), Math.round(kcal), ahoraCompleto(), baseUnit,
          baseUnit ? numeroOpcional(ref.kcal) : null,
          baseUnit ? numeroOpcional(ref.protein) : null,
          baseUnit ? numeroOpcional(ref.fat) : null,
@@ -689,13 +683,13 @@ app.get('/api/energy', (req, res) => {
   if (!profile || !profile.height_cm || !profile.age || !profile.sex || !profile.activity) {
     return res.json({ available: false });
   }
-  const since = `-${days} days`;
+  const since = restarDias(days);
   const foodByDate = db.prepare(
-    `SELECT date, SUM(calories) AS c FROM food_entries WHERE date >= date('now','localtime',?) GROUP BY date`
+    `SELECT date, SUM(calories) AS c FROM food_entries WHERE date >= ? GROUP BY date`
   ).all(since);
   const burnedByDate = Object.fromEntries(
     db.prepare(
-      `SELECT date, SUM(calories) AS c FROM exercise_logs WHERE date >= date('now','localtime',?) GROUP BY date`
+      `SELECT date, SUM(calories) AS c FROM exercise_logs WHERE date >= ? GROUP BY date`
     ).all(since).map((r) => [r.date, r.c])
   );
   const weights = db.prepare('SELECT date, weight FROM weight_entries ORDER BY date ASC').all();
@@ -810,8 +804,8 @@ app.post('/api/anxiety', (req, res) => {
 app.get('/api/anxiety', (req, res) => {
   const days = Math.min(Number(req.query.days) || 30, 90);
   const episodes = db.prepare(
-    `SELECT * FROM anxiety_episodes WHERE date >= date('now','localtime',?) ORDER BY date DESC, time DESC`
-  ).all(`-${days} days`);
+    `SELECT * FROM anxiety_episodes WHERE date >= ? ORDER BY date DESC, time DESC`
+  ).all(restarDias(days));
   const byHour = db.prepare(`
     SELECT CAST(substr(time, 1, 2) AS INTEGER) AS hour, COUNT(*) AS count
     FROM anxiety_episodes GROUP BY hour ORDER BY hour
@@ -872,16 +866,13 @@ app.get('/api/days', (req, res) => {
 function computeStreaks() {
   const dates = db.prepare('SELECT DISTINCT date FROM xp_events ORDER BY date ASC').all().map((r) => r.date);
   const set = new Set(dates);
-  const isoOf = (dt) =>
-    `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-
   // racha actual: días consecutivos hasta hoy (o hasta ayer si hoy aún no sumó)
   let current = 0;
-  const cursor = new Date();
-  if (!set.has(isoOf(cursor))) cursor.setDate(cursor.getDate() - 1);
-  while (set.has(isoOf(cursor))) {
+  let cursor = hoy();
+  if (!set.has(cursor)) cursor = restarDias(1, cursor);
+  while (set.has(cursor)) {
     current++;
-    cursor.setDate(cursor.getDate() - 1);
+    cursor = restarDias(1, cursor);
   }
 
   let best = 0;

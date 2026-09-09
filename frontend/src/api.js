@@ -22,10 +22,15 @@ export const api = {
   del: (url) => request(url, { method: 'DELETE' })
 };
 
-export const todayStr = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+// El día de la app es el día en Buenos Aires, igual que en el backend. Con la
+// hora del navegador, abrirla desde otro huso mostraría un "hoy" distinto del
+// que guarda el servidor y el día aparecería vacío.
+const ZONA = 'America/Argentina/Buenos_Aires';
+const fFecha = new Intl.DateTimeFormat('en-CA', {
+  timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit'
+});
+
+export const todayStr = () => fFecha.format(new Date());
 
 export const fmtDate = (iso) => {
   const [y, m, d] = iso.split('-').map(Number);

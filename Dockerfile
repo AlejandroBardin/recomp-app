@@ -8,6 +8,14 @@ RUN npm run build
 
 # Etapa 2: backend + frontend estático
 FROM node:20-alpine
+
+# La app razona en hora de Buenos Aires. Node lo resuelve solo (Intl trae sus
+# propias zonas), pero SQLite pide la hora al sistema: sin tzdata, los
+# `datetime('now','localtime')` de los DEFAULT quedarían en UTC y un registro
+# de las 22 h figuraría creado al día siguiente.
+RUN apk add --no-cache tzdata
+ENV TZ=America/Argentina/Buenos_Aires
+
 WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm install --omit=dev

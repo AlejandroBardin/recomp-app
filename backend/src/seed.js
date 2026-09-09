@@ -1,15 +1,10 @@
 // Datos de ejemplo para probar la app inmediatamente.
 // Ejecutar con: npm run seed  (solo carga si no hay datos previos)
 const db = require('./db');
+const { restarDias } = require('./fecha');
 
-const fmt = (d) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-const daysAgo = (n) => {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return fmt(d);
-};
+// Los días del seed cuentan desde hoy en Buenos Aires, como el resto de la app.
+const daysAgo = (n) => restarDias(n);
 
 const hasFood = db.prepare('SELECT COUNT(*) AS n FROM food_entries').get().n > 0;
 const hasWeights = db.prepare('SELECT COUNT(*) AS n FROM weight_entries').get().n > 0;

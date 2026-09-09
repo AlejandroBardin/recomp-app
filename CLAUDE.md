@@ -38,6 +38,20 @@ first, en español rioplatense (vos/tuteo), tono neutro y sin culpa.
   `4.png`→body-03...). El script borra solo textos/artefactos sueltos.
 - Los PNGs crudos de la raíz **no se versionan** (solo los procesados).
 
+## Zona horaria
+
+El día de la app es el día en **Buenos Aires**, en los dos lados. El contenedor
+corre en UTC: sin esto, una comida cargada a las 22 h se sumaba al día
+siguiente y "Hoy" aparecía vacío.
+
+- `backend/src/fecha.js` (`hoy`, `ahora`, `restarDias`) resuelve la zona con
+  `Intl`, que trae sus propias zonas adentro de Node y no depende de `TZ`.
+  Ninguna consulta usa `date('now','localtime')`: el rango se calcula en JS y
+  viaja como parámetro.
+- El `TZ` del Dockerfile (con `tzdata`, que alpine no trae) es para lo que
+  resuelve SQLite: los `datetime('now','localtime')` de los DEFAULT.
+- El frontend usa la misma zona fija en `todayStr()`, no la del navegador.
+
 ## Comida y catálogo de ejercicios
 
 - `food_entries` guarda además de kcal: `qty`, `unit` ('g'|'ml'|'unidad'|

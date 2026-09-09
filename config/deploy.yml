@@ -28,6 +28,7 @@ env:
     NODE_ENV: production
     PORT: "3001"
     DB_PATH: /data/recomp.db
+    TZ: America/Argentina/Buenos_Aires
 
 ssh:
   user: ubuntu
